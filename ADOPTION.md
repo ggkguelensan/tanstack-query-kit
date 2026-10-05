@@ -26,7 +26,7 @@
 | Типы | Inference сохраняется через options и select; нет `any` или casts, скрывающих ошибку контракта |
 | MO | Все cache-effects внутри MO, callbacks не перезаписаны consumer, Promise ожидается |
 | Meta | Тип зарегистрирован и executor действительно установлен на используемом клиенте |
-| Aggregation | Только ссылки на QO и чистые функции; нет hooks, keys и side effects |
+| Aggregation | Только ссылки на QO/MO и чистые функции; нет hooks, keys и side effects |
 | Consumer | UI-effects отделены от обязательных cache-effects; нет proxy-hooks |
 | SSR | Request-scoped client на сервере, стабильный client в браузере |
 | Обезличенность | Примеры содержат только вымышленные сущности, нет внутренних URL, путей или данных |

@@ -231,6 +231,7 @@ export const productRenameMO = () =>
 import type { Category, Product } from './catalog.types';
 import { categoryDetailQO } from './category.qo';
 import { productDetailQO } from './product.qo';
+import { productRenameMO } from './product.mo';
 
 const toProductPageView = (product: Product, category: Category | undefined) => ({
   title: product.name,
@@ -243,6 +244,7 @@ const toProductPageView = (product: Product, category: Category | undefined) => 
 export const productPageAggregation = {
   productQO: productDetailQO,
   categoryQO: categoryDetailQO,
+  renameProductMO: productRenameMO,
   shouldQueryCategory: (product: Product | undefined) =>
     product?.status === 'published' && product.categoryId !== undefined,
   toView: toProductPageView,
@@ -258,7 +260,6 @@ export const productPageAggregation = {
 ```tsx
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { productPageAggregation } from './product-page.aggregation';
-import { productRenameMO } from './product.mo';
 
 type ProductPanelProps = {
   productId: string | undefined;
@@ -276,7 +277,7 @@ export const ProductPanel = ({ productId, isPanelOpen, onRenamed }: ProductPanel
     enabled: isPanelOpen
       && productPageAggregation.shouldQueryCategory(productQuery.data),
   });
-  const rename = useMutation(productRenameMO());
+  const rename = useMutation(productPageAggregation.renameProductMO());
 
   if (!isPanelOpen) return null;
   if (productId === undefined || productId === '') return <p>Выберите товар</p>;
