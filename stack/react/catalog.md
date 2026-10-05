@@ -213,7 +213,7 @@ declare module '@tanstack/react-query' {
 `query-client.ts`
 
 ```ts
-import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
+import { matchQuery, MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 import './mutation-meta';
 
 export const createQueryClient = (
@@ -227,11 +227,11 @@ export const createQueryClient = (
   });
   const mutationCache = new MutationCache({
     onSuccess: async (_data, _variables, _onMutateResult, mutation, context) => {
-      await Promise.all(
-        (mutation.meta?.invalidates ?? []).map((queryKey) =>
-          context.client.invalidateQueries({ queryKey }),
-        ),
-      );
+      const invalidates = mutation.meta?.invalidates;
+      if (!invalidates?.length) return;
+      await context.client.invalidateQueries({
+        predicate: (query) => invalidates.some((queryKey) => matchQuery({ queryKey }, query)),
+      });
     },
   });
 
@@ -241,7 +241,7 @@ export const createQueryClient = (
 
 Браузерный adapter может передать `onBackgroundError` для общего уведомления; серверный adapter не передаёт UI-callback. Ошибку первой загрузки отображает consumer или Boundary. Подписчики одной query не создают отдельные уведомления о фоновой ошибке.
 
-Исполнитель знает только список префиксов. При отсутствии плана он ничего не делает. Фабрика клиента вызывается один раз на серверный request или при создании стабильного браузерного клиента, а не при каждом рендере.
+Исполнитель сопоставляет список префиксов одним вызовом: их пересечение не отменяет и не перезапускает один refetch. При отсутствии или пустом плане он ничего не делает. Подход показан у [TkDodo — Automatic Invalidation](https://tkdodo.eu/blog/automatic-query-invalidation-after-mutations). Фабрика клиента вызывается один раз на серверный request или при создании стабильного браузерного клиента, а не при каждом рендере.
 
 ## Мутации
 
@@ -320,10 +320,10 @@ export const ProductPanel = ({ productId, isPanelOpen, onRenamed }: ProductPanel
     ...productPageAggregation.productQO({ productId }),
     enabled: isPanelOpen,
   });
+  const shouldQueryCategory = productPageAggregation.shouldQueryCategory(productQuery.data);
   const categoryQuery = useQuery({
     ...productPageAggregation.categoryQO({ categoryId: productQuery.data?.categoryId }),
-    enabled: isPanelOpen
-      && productPageAggregation.shouldQueryCategory(productQuery.data),
+    enabled: isPanelOpen && shouldQueryCategory,
   });
   const rename = useMutation(productPageAggregation.renameProductMO());
 
@@ -342,8 +342,8 @@ export const ProductPanel = ({ productId, isPanelOpen, onRenamed }: ProductPanel
       <h1>{view.title}</h1>
       {productQuery.isRefetchError && <p>Не удалось обновить товар</p>}
       {view.categoryName && <p>{view.categoryName}</p>}
-      {categoryQuery.isFetching && <p>Загрузка категории…</p>}
-      {categoryQuery.isError && <p>Не удалось загрузить категорию</p>}
+      {shouldQueryCategory && categoryQuery.isFetching && <p>Загрузка категории…</p>}
+      {shouldQueryCategory && categoryQuery.isError && <p>Не удалось загрузить категорию</p>}
       <button
         disabled={rename.isPending}
         onClick={() => rename.mutate(

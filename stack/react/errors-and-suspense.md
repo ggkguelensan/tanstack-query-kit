@@ -23,13 +23,13 @@ declare module '@tanstack/react-query' {
 `ui-error.ts`
 
 ```ts
-export const toErrorMessage = ({ error }: { error: unknown }): string => {
-  if (error instanceof Error) return error.message;
-  return 'Не удалось выполнить операцию';
-};
+import { getErrorPresentation } from './catalog-error';
+
+export const toErrorMessage = ({ error }: { error: unknown }): string =>
+  getErrorPresentation({ error }).message;
 ```
 
-Это минимальный UI-mapper для вымышленных данных. Приложение определяет безопасное пользовательское сообщение согласно своему error-контракту и не обязано показывать сырое сообщение transport.
+Mapper использует контракт из [примера ниже](#стадии-отказа-записи), не выводя сырое сообщение transport. Приложение определяет собственные коды и пользовательские сообщения.
 
 ## Граница загрузки и восстановления
 
@@ -126,3 +126,86 @@ export const ProductRename = ({ productId }: { productId: string }) => {
 Consumer показывает pending и ошибку; MO сохраняет свой cache-effect и callbacks. `rename.reset()` сбрасывает локальное состояние мутации и не повторяет серверную запись. Для выбранных ошибок приложение может установить predicate `throwOnError` и Error Boundary вокруг формы; после отказа Boundary должно также сбросить состояние мутации или размонтировать consumer. При использовании `mutateAsync` отклонение Promise обрабатывается отдельно. См. [useMutation](https://tanstack.com/query/latest/docs/framework/react/reference/useMutation).
 
 Общие уведомления не дублируются на уровне формы и `MutationCache`. Общая telemetry при необходимости остаётся в инфраструктуре; обязательный rollback остаётся в MO. Подходы к локальной ошибке, Boundary и уведомлениям обсуждаются у [TkDodo](https://tkdodo.eu/blog/react-query-error-handling); его примеры callbacks `useQuery` до v5 не переносятся в Kit.
+
+
+## Стадии отказа записи
+
+Этот дополнительный пример демонстрирует политику отказа обязательного refetch. Он не задаёт универсальный формат ошибок. Transport нормализует известные ответы в `CatalogOperationError`: `kind` описывает происхождение, `outcome` — подтверждённость результата команды. Статус HTTP не заменяет контракт сервиса; неизвестная ошибка остаётся `unknown` и требует диагностики.
+
+`catalog-error.ts`
+
+```ts
+import type { Product } from './catalog.types';
+
+export class CatalogOperationError extends Error {
+  readonly kind: 'transport' | 'service' | 'business';
+  readonly outcome: 'rejected' | 'unknown';
+
+  constructor({ kind, outcome, cause }: {
+    kind: 'transport' | 'service' | 'business';
+    outcome: 'rejected' | 'unknown';
+    cause?: unknown;
+  }) {
+    super('Catalog operation failed', { cause });
+    this.kind = kind;
+    this.outcome = outcome;
+  }
+}
+
+export class CacheReconciliationError extends Error {
+  readonly product: Product;
+
+  constructor({ product, cause }: { product: Product; cause: unknown }) {
+    super('Write confirmed; cache reconciliation failed', { cause });
+    this.product = product;
+  }
+}
+
+export const getErrorPresentation = ({ error }: { error: unknown }) => {
+  if (error instanceof CacheReconciliationError) {
+    return { message: 'Товар сохранён, но связанные данные не обновились', recovery: 'retry-read' } as const;
+  }
+  if (error instanceof CatalogOperationError) {
+    if (error.outcome === 'unknown') {
+      return { message: 'Результат записи неизвестен. Проверьте состояние товара', recovery: 'check-write' } as const;
+    }
+    if (error.kind === 'business') {
+      return { message: 'Действие отклонено. Проверьте введённые данные', recovery: 'revise-command' } as const;
+    }
+    return { message: 'Операция не выполнена. Повтор зависит от её контракта', recovery: 'command-policy' } as const;
+  }
+  return { message: 'Неожиданная ошибка приложения', recovery: 'report' } as const;
+};
+```
+
+`product-rename-refresh.mo.ts`
+
+```ts
+import { mutationOptions } from '@tanstack/react-query';
+import { CacheReconciliationError } from './catalog-error';
+import { renameProduct } from './catalog.transport';
+import type { RenameProductRequest } from './catalog.types';
+import { productQK } from './product.qk';
+
+export const productRenameWithRequiredRefreshMO = () =>
+  mutationOptions({
+    mutationFn: (variables: RenameProductRequest) => renameProduct(variables),
+    onSuccess: async (product, variables, _onMutateResult, { client }) => {
+      try {
+        client.setQueryData(productQK.detail({ productId: variables.productId }), product);
+        await client.invalidateQueries(
+          { queryKey: productQK.lists() },
+          { throwOnError: true },
+        );
+      } catch (cause) {
+        throw new CacheReconciliationError({ product, cause });
+      }
+    },
+  });
+```
+
+Здесь `mutationFn` подтвердила запись, а отказ последующего cache-effect классифицируется отдельно. Отклонение success callback вызывает error lifecycle mutation; оно не означает, что сервер отклонил команду. По умолчанию invalidation не отклоняет Promise из-за ошибки query; `throwOnError: true` — осознанная политика этого примера. Ожидание распространяется на выбранные refetch; неактивные queries только становятся stale.
+
+Если MO добавляет optimistic update, её `onError` не откатывает подтверждённую запись при `CacheReconciliationError`. Для `outcome: 'unknown'` применяется политика проверки результата из [спецификации](../../SPECIFICATION.md#повторы-и-результат-записи), а не вывод об отказе по timeout. Consumer показывает подтверждённость записи и восстанавливает чтение через QO; `mutation.reset()` только закрывает состояние ошибки. Команда не отправляется повторно ради восстановления кэша. Неизвестная ошибка программы передаётся мониторингу и выбранной UI-границе.
+
+Контракт приведён для записи; read-errors не получают `outcome` команды. Приложение отдельно определяет допустимые повторы чтения по нормализованным transport/service ошибкам. Регистрация `defaultError: unknown` сохраняет необходимость runtime-narrowing для обоих видов операций.

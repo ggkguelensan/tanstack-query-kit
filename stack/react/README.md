@@ -6,7 +6,7 @@
 
 [Каталог](catalog.md) содержит согласованные QK/QO/MO/Aggregation, инфраструктуру и consumers. Именованные TS/TSX-блоки можно собрать в одном каталоге. Проверенные версии: `@tanstack/react-query@5.104.1`, React 19.2, TypeScript 5.9. Для отдельного примера восстановления используется `react-error-boundary@6`; это выбор примера.
 
-Consumer передаёт QO в `useQuery`, `useQueries` или `useInfiniteQuery`, MO — в `useMutation`. Динамические коллекции используют `useQueries`; hooks не вызываются в цикле или условно в одном компоненте. Каждая ветка QO содержит полный конфиг; inline-выбор через early return передаёт его в один `queryOptions`, который выводит типы из обеих веток. В inline-функции контекст `queryFn` указывается как `QueryFunctionContext`; явные generic-аргументы не требуются.
+Consumer передаёт QO в `useQuery`, `useQueries` или `useInfiniteQuery`, MO — в `useMutation`. Динамические коллекции используют `useQueries`; hooks не вызываются в цикле или условно в одном компоненте. Особенности inference optional-QO объяснены рядом с конфигом в [каталоге](catalog.md#query-options).
 
 ## Ошибки и Suspense
 
@@ -32,11 +32,20 @@ Consumer выбирает `useSuspenseQuery`, `useSuspenseInfiniteQuery` или 
 
 React Boundary не ловит произвольный отклонённый Promise обработчика события; он обрабатывается отдельно. Loader использует [императивный API](../tanstack-query/README.md#императивное-выполнение), framework-поведение раскрывается на странице выбранного роутера.
 
+## Selectors и оптимистическое представление
+
+`select` относится к observer и сохраняет исходную форму кэша. Дорогое преобразование не становится общим для всех consumers автоматически: стабильная ссылка на selector позволяет избежать повторного вычисления при неизменных данных; дальнейшая мемоизация зависит от задачи. [TkDodo — Selectors](https://tkdodo.eu/blog/react-query-selectors-supercharged).
+
+Временный UI можно строить из `mutation.variables` и `mutation.isPending`, не изменяя Query cache. Cache-level optimistic update нужен, когда оптимистические данные должны наблюдать другие consumers; его эффекты находятся в MO. [Optimistic Updates](https://tanstack.com/query/latest/docs/framework/react/guides/optimistic-updates).
+
+Для конкурентных optimistic mutations MO определяет связанные операции, например через `mutationKey` и фильтр `client.isMutating`. Invalidation одной завершившейся записи не должна перезаписать более новую оптимистическую запись. Универсальный meta executor не решает эту сценарную политику; такой эффект задаётся callback MO. [TkDodo — Concurrent Updates](https://tkdodo.eu/blog/concurrent-optimistic-updates-in-react-query).
+
 ## Проверка интеграции
 
 - Обычная query сохраняет данные при неудачном refetch; два observers не создают два глобальных уведомления.
 - Если выбран Suspense: первая ошибка без данных попадает в Boundary; reset позволяет запросу повториться; смена ресурса сбрасывает соответствующую границу.
 - Фоновая ошибка не заменяет данные Suspense fallback без явного решения consumer.
 - Mutation pending отображается отдельно; mutation reset и обработка rejected `mutateAsync` проверены независимо от query reset.
+- [Пример стадий отказа](errors-and-suspense.md#стадии-отказа-записи) различает отказ команды и отказ обязательного refresh после подтверждённой записи.
 
 [Выбор остальных материалов стека](../README.md).
