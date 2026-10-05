@@ -1,6 +1,8 @@
-# Пример: ошибки и Suspense
+# React: ошибки и Suspense
 
-Правила находятся в [спецификации, разделе 8](../SPECIFICATION.md#8-ошибки-и-восстановление). Пример использует типы, `productRequiredDetailQO` и `productRenameMO` из [каталога](catalog.md). Имена файлов дополняют тот TypeScript-пример. `QueryClientProvider` устанавливается framework adapter с тем же клиентом, что используют остальные consumers. Для показанного Error Boundary используется [react-error-boundary](https://github.com/bvaughn/react-error-boundary); Kit не требует именно эту библиотеку.
+Область применения: React, TanStack Query v5 и выбранная библиотека Error Boundary. [Механика React](README.md#ошибки-и-suspense).
+
+Правила находятся в [спецификации, разделе 8](../../SPECIFICATION.md#8-ошибки-и-восстановление). Пример использует типы, `productRequiredDetailQO` и `productRenameMO` из [каталога](catalog.md). Имена файлов дополняют тот TypeScript-пример. `QueryClientProvider` устанавливается framework adapter с тем же клиентом, что используют остальные consumers. Для показанного Error Boundary используется [react-error-boundary](https://github.com/bvaughn/react-error-boundary); Kit не требует именно эту библиотеку.
 
 ## Тип ошибки приложения
 
