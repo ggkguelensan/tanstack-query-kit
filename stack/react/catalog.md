@@ -109,7 +109,7 @@ import { productQK } from './product.qk';
 
 const productDetailCachePolicy = { staleTime: 30_000, gcTime: 300_000 } as const;
 
-const resolveProductDetailOptions = ({ productId }: { productId: string | undefined }) => {
+const resolveProductDetailOptionsParts = ({ productId }: { productId: string | undefined }) => {
   if (!productId) {
     return {
       queryKey: productQK.unavailableDetail(),
@@ -125,7 +125,7 @@ const resolveProductDetailOptions = ({ productId }: { productId: string | undefi
 
 export const productDetailQO = (params: { productId: string | undefined }) =>
   queryOptions({
-    ...resolveProductDetailOptions(params),
+    ...resolveProductDetailOptionsParts(params),
     ...productDetailCachePolicy,
   });
 
@@ -168,7 +168,7 @@ import { queryOptions, skipToken } from '@tanstack/react-query';
 import { getCategory } from './catalog.transport';
 import { categoryQK } from './category.qk';
 
-const resolveCategoryDetailOptions = ({ categoryId }: { categoryId: string | undefined }) => {
+const resolveCategoryDetailOptionsParts = ({ categoryId }: { categoryId: string | undefined }) => {
   if (!categoryId) {
     return {
       queryKey: categoryQK.unavailableDetail(),
@@ -184,13 +184,13 @@ const resolveCategoryDetailOptions = ({ categoryId }: { categoryId: string | und
 
 export const categoryDetailQO = (params: { categoryId: string | undefined }) =>
   queryOptions({
-    ...resolveCategoryDetailOptions(params),
+    ...resolveCategoryDetailOptionsParts(params),
     staleTime: 60_000,
     gcTime: 300_000,
   });
 ```
 
-Resolver остаётся приватной частью `.qo`: early return выбирает технический ключ до вызова конкретного QK. `queryOptions` вызывается один раз после выбора ветки и выводит тип данных из исполняемого `queryFn`; `as const` сохраняет `skipToken` как unique symbol. Типы ответа и ключа не передаются в generics.
+Resolver `...OptionsParts` возвращает только `queryKey` и `queryFn` и остаётся приватной частью `.qo`: early return выбирает технический ключ до вызова конкретного QK. `queryOptions` вызывается один раз после выбора ветки и выводит тип данных из исполняемого `queryFn`; `as const` сохраняет `skipToken` как unique symbol. Типы ответа и ключа не передаются в generics.
 
 `productRequiredDetailQO` сохраняет тот же detail-ключ и форму данных, но не допускает `skipToken`. Она подходит для Suspense и для императивного consumer с готовым ID. Пустая строка нарушает её контракт; обычная `productDetailQO` выражает неготовность через технический ключ и early return.
 

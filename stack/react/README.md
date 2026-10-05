@@ -6,7 +6,7 @@
 
 [Каталог](catalog.md) содержит согласованные QK/QO/MO/Aggregation, инфраструктуру и consumers. Именованные TS/TSX-блоки можно собрать в одном каталоге. Проверенные версии: `@tanstack/react-query@5.104.1`, React 19.2, TypeScript 5.9. Для отдельного примера восстановления используется `react-error-boundary@6`; это выбор примера.
 
-Consumer передаёт QO в `useQuery`, `useQueries` или `useInfiniteQuery`, MO — в `useMutation`. Динамические коллекции используют `useQueries`; hooks не вызываются в цикле или условно в одном компоненте. Внутренний resolver в `.qo` выбирает options через early return; один вызов `queryOptions` выводит общий тип ключа и данных из обеих веток. Для вынесенного `queryFn` указывается только callback-контекст `QueryFunctionContext`; явные generic-аргументы не требуются.
+Consumer передаёт QO в `useQuery`, `useQueries` или `useInfiniteQuery`, MO — в `useMutation`. Динамические коллекции используют `useQueries`; hooks не вызываются в цикле или условно в одном компоненте. Внутренний resolver `...OptionsParts` в `.qo` выбирает `queryKey` и `queryFn` через early return; один вызов `queryOptions` выводит общий тип ключа и данных из обеих веток. Для вынесенного `queryFn` указывается только callback-контекст `QueryFunctionContext`; явные generic-аргументы не требуются.
 
 ## Ошибки и Suspense
 
