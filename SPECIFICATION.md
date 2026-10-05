@@ -1,6 +1,6 @@
 # Спецификация TanStack Query Kit
 
-Версия спецификации: **1.0**. Статус: архитектурный контракт для внедрения.
+Версия спецификации: **1.1**. Статус: архитектурный контракт для внедрения.
 
 Слова **обязательно**, **запрещено** и **допустимо** задают правила Kit. Это соглашения прикладной архитектуры, а не дополнительные ограничения самой библиотеки TanStack Query.
 
@@ -22,6 +22,8 @@ Kit не определяет HTTP-клиент, формат API, runtime-ва�
 | `<scenario>.aggregation.ts` | Namespace-объект `<scenario>Aggregation` | Ссылки на QO/MO и чистая композиция |
 
 Namespace здесь означает обычный `const`-объект, а не TypeScript `namespace`. `.qk`, `.qo`, `.mo`, `.aggregation` — виды файлов; `QK`, `QO`, `MO`, `Aggregation` — суффиксы экспортов.
+
+Фабрики `.qk`, `.qo` и `.mo` принимают один объект с именованными полями, даже если параметр один. Фабрики без параметров вызываются без аргументов. Это правило относится к прикладным параметрам Kit; сигнатуры transport adapter и callback-контексты TanStack Query им не ограничиваются.
 
 | Кто импортирует | Разрешённые зависимости внутри Query Kit |
 | --- | --- |
@@ -59,10 +61,24 @@ export const productQK = {
   lists: () => [...productQK.all(), 'list'] as const,
   list: (params: ProductListParams) => [...productQK.lists(), params] as const,
   details: () => [...productQK.all(), 'detail'] as const,
-  detail: (productId: string | undefined) =>
-    [...productQK.details(), productId] as const,
+  detail: (params: { productId: string }) =>
+    [...productQK.details(), params] as const,
 } as const;
 ```
+
+Параметры ресурса в query key обязаны быть объектами с именованными полями: `{ productId }`, а не позиционным `productId`. Статические сегменты иерархии (`'product'`, `'detail'`) остаются строками. Допустим единый объект `params` или отдельные объекты идентичности и фильтров:
+
+```ts
+// Альтернативная форма detail-ключа для ресурса с фильтрами.
+detail: ({ productId, filterParams }: {
+  productId: string;
+  filterParams: { count: number; dateDiapason: DateDiapason };
+}) => [...productQK.details(), { productId }, filterParams] as const,
+```
+
+Имена полей делают назначение параметров видимым в TanStack Query Devtools. Выбранная структура ключа должна быть единой для одной операции; альтернативные формы выше не используются одновременно для одного ресурса.
+
+`.qk` принимает только готовые параметры ресурса. Обязательный ID не допускает `undefined`, `null` или фиктивные значения. Проверки готовности выполняются в `.qo` **до вызова** конкретного ключа; `.qk` не разрешает отсутствие ID и не проверяет существование записи на сервере. Валидный идентификатор описывает запрашиваемый ресурс, но не гарантирует успешный ответ. Отсутствие необязательного фильтра допустимо, если оно описывает реальный вариант запроса, например список без ограничения по городу.
 
 В ключ входят все параметры, влияющие на результат: идентификатор, фильтры, сортировка, страница, локаль или область доступа, если от них зависит ресурс. Параметры нельзя менять после создания options. Нормализация параметров, если нужна, выполняется согласованно для ключа и запроса до передачи в `.qk`.
 
@@ -79,11 +95,11 @@ export const productQK = {
 Consumer запрещено:
 
 - импортировать `.qk` или собирать ключ вручную;
-- читать `productDetailQO(id).queryKey`;
+- читать `productDetailQO({ productId: id }).queryKey`;
 - принимать ключ отдельным аргументом для обхода границы;
 - выполнять доменную invalidation после мутации.
 
-Consumer передаёт options целиком: `useQuery(productDetailQO(id))`, `queryClient.fetchQuery(productDetailQO(id))`, `queryClient.ensureQueryData(productDetailQO(id))`. API, которым требуется отдельный ключ для доменной записи в кэш, используется внутри `.mo`.
+Consumer передаёт options целиком: `useQuery(productDetailQO({ productId: id }))`, `queryClient.fetchQuery(productDetailQO({ productId: id }))`, `queryClient.ensureQueryData(productDetailQO({ productId: id }))`. API, которым требуется отдельный ключ для доменной записи в кэш, используется внутри `.mo`.
 
 ## 4. Query options: `.qo.ts`
 
@@ -94,7 +110,7 @@ Consumer передаёт options целиком: `useQuery(productDetailQO(id))
 Обязательные правила:
 
 1. `queryFn` вызывает transport adapter и передаёт ему `signal`.
-2. Невозможность выполнить запрос из-за отсутствующего обязательного параметра выражается через `skipToken` внутри `.qo`.
+2. Готовность обязательных параметров проверяется до вызова конкретного ключа `.qk`. Если параметр отсутствует или невалиден, `.qo` использует префикс соответствующей ветки ключей и `skipToken`, не создавая ключ конкретного ресурса.
 3. `enabled` принадлежит consumer и запрещён в `.qo`.
 4. Фабрика не принимает произвольные TanStack overrides. Consumer добавляет настройки наблюдателя через spread.
 5. Consumer не подменяет `queryKey`, `queryFn` и контракт пагинации. Изменение идентичности или способа загрузки требует отдельной QO.
@@ -102,16 +118,21 @@ Consumer передаёт options целиком: `useQuery(productDetailQO(id))
 7. `staleTime` и `gcTime` выбираются по свойствам ресурса. Их нельзя увеличивать только для сокрытия случайных повторных запросов.
 
 ```ts
-export const productDetailQO = (productId: string | undefined) =>
-  queryOptions({
-    queryKey: productQK.detail(productId),
-    queryFn: productId !== undefined && productId !== ''
+export const productDetailQO = ({ productId }: { productId: string | undefined }) => {
+  const isReady = productId !== undefined && productId !== '';
+
+  return queryOptions({
+    queryKey: isReady ? productQK.detail({ productId }) : productQK.details(),
+    queryFn: isReady
       ? ({ signal }) => getProduct(productId, { signal })
       : skipToken,
   });
+};
 ```
 
-Проверка готовности зависит от типа параметра: для числового ID значение `0` может быть валидным. Non-null assertion и фиктивный ID не заменяют guard.
+При отсутствии ID `details()` используется только как ключ заблокированного наблюдателя. Под этим префиксом не загружают и не записывают данные ресурса; сам префикс также остаётся фильтром для cache-effect. После появления валидного ID `.qo` создаёт конкретный detail-ключ.
+
+Проверка готовности зависит от типа параметра: для числового ID значение `0` может быть валидным. Non-null assertion и подстановка `''` или `0` вместо отсутствующего ID не заменяют guard.
 
 `skipToken` — техническая блокировка, `enabled` — решение consumer о запуске. Они не взаимозаменяемы. Ручной `refetch()` не запускает запрос с `skipToken`; см. [Disabling Queries](https://tanstack.com/query/latest/docs/framework/react/guides/disabling-queries).
 
@@ -127,7 +148,7 @@ export const productDetailQO = (productId: string | undefined) =>
 
 Каждая фабрика экспортируется отдельно: `productRenameMO`, `productCreateMO`. Namespace `productMO = { ... }` и пустые `.mo.ts` запрещены.
 
-Прикладные variables передаются одним аргументом `mutationFn`; несколько значений объединяются в объект. Контекст TanStack Query — отдельный аргумент библиотеки, он не является частью variables.
+Прикладные variables `mutationFn` обязаны быть одним объектом с именованными полями, даже для одного значения: `({ productId }: { productId: string })`, а не `(productId: string)`. Контекст TanStack Query — отдельный аргумент библиотеки, он не является частью variables.
 
 `.mo` владеет **всем cache-effect** операции: invalidation, `setQueryData`, removal, refetch, optimistic update и rollback. Это включает затронутые ресурсы других доменов. Consumer не дополняет и не переопределяет этот эффект.
 
@@ -156,7 +177,7 @@ export const productRenameMO = () =>
   mutationOptions({
     mutationFn: (variables: RenameProductRequest) => renameProduct(variables),
     onSuccess: async (product, variables, _onMutateResult, { client }) => {
-      client.setQueryData(productQK.detail(variables.productId), product);
+      client.setQueryData(productQK.detail({ productId: variables.productId }), product);
       await client.invalidateQueries({ queryKey: productQK.lists() });
     },
   });

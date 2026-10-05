@@ -74,8 +74,8 @@ export const productQK = {
   infinite: (params: ProductListParams) =>
     [...productQK.lists(), 'infinite', params] as const,
   details: () => [...productQK.all(), 'detail'] as const,
-  detail: (productId: string | undefined) =>
-    [...productQK.details(), productId] as const,
+  detail: (params: { productId: string }) =>
+    [...productQK.details(), params] as const,
 } as const;
 ```
 
@@ -85,8 +85,8 @@ export const productQK = {
 export const categoryQK = {
   all: () => ['category'] as const,
   details: () => [...categoryQK.all(), 'detail'] as const,
-  detail: (categoryId: string | undefined) =>
-    [...categoryQK.details(), categoryId] as const,
+  detail: (params: { categoryId: string }) =>
+    [...categoryQK.details(), params] as const,
 } as const;
 ```
 
@@ -102,15 +102,18 @@ import { getProduct, getProductPage, getProducts } from './catalog.transport';
 import type { ProductListParams } from './catalog.types';
 import { productQK } from './product.qk';
 
-export const productDetailQO = (productId: string | undefined) =>
-  queryOptions({
-    queryKey: productQK.detail(productId),
-    queryFn: productId !== undefined && productId !== ''
+export const productDetailQO = ({ productId }: { productId: string | undefined }) => {
+  const isReady = productId !== undefined && productId !== '';
+
+  return queryOptions({
+    queryKey: isReady ? productQK.detail({ productId }) : productQK.details(),
+    queryFn: isReady
       ? ({ signal }) => getProduct(productId, { signal })
       : skipToken,
     staleTime: 30_000,
     gcTime: 300_000,
   });
+};
 
 export const productListQO = (params: ProductListParams) =>
   queryOptions({
@@ -139,15 +142,18 @@ import { queryOptions, skipToken } from '@tanstack/react-query';
 import { getCategory } from './catalog.transport';
 import { categoryQK } from './category.qk';
 
-export const categoryDetailQO = (categoryId: string | undefined) =>
-  queryOptions({
-    queryKey: categoryQK.detail(categoryId),
-    queryFn: categoryId !== undefined && categoryId !== ''
+export const categoryDetailQO = ({ categoryId }: { categoryId: string | undefined }) => {
+  const isReady = categoryId !== undefined && categoryId !== '';
+
+  return queryOptions({
+    queryKey: isReady ? categoryQK.detail({ categoryId }) : categoryQK.details(),
+    queryFn: isReady
       ? ({ signal }) => getCategory(categoryId, { signal })
       : skipToken,
     staleTime: 60_000,
     gcTime: 300_000,
   });
+};
 ```
 
 Значения времени иллюстративны. В реальном приложении они выбираются по допустимому возрасту данных.
@@ -215,7 +221,7 @@ export const productRenameMO = () =>
   mutationOptions({
     mutationFn: (variables: RenameProductRequest) => renameProduct(variables),
     onSuccess: async (product, variables, _onMutateResult, { client }) => {
-      client.setQueryData(productQK.detail(variables.productId), product);
+      client.setQueryData(productQK.detail({ productId: variables.productId }), product);
       await client.invalidateQueries({ queryKey: productQK.lists() });
     },
   });
@@ -269,11 +275,11 @@ type ProductPanelProps = {
 
 export const ProductPanel = ({ productId, isPanelOpen, onRenamed }: ProductPanelProps) => {
   const productQuery = useQuery({
-    ...productPageAggregation.productQO(productId),
+    ...productPageAggregation.productQO({ productId }),
     enabled: isPanelOpen,
   });
   const categoryQuery = useQuery({
-    ...productPageAggregation.categoryQO(productQuery.data?.categoryId),
+    ...productPageAggregation.categoryQO({ categoryId: productQuery.data?.categoryId }),
     enabled: isPanelOpen
       && productPageAggregation.shouldQueryCategory(productQuery.data),
   });
@@ -320,7 +326,7 @@ import { productDetailQO } from './product.qo';
 
 export const loadProduct = async (client: QueryClient, productId: string) => {
   if (productId === '') throw new Error('Product ID is required');
-  return client.ensureQueryData(productDetailQO(productId));
+  return client.ensureQueryData(productDetailQO({ productId }));
 };
 ```
 
@@ -332,7 +338,7 @@ Framework adapter передаёт request-scoped client на сервере и�
 
 ```tsx
 const products = useQueries({
-  queries: productIds.map((id) => productDetailQO(id)),
+  queries: productIds.map((id) => productDetailQO({ productId: id })),
 });
 
 const names = useQuery({
