@@ -20,7 +20,7 @@ React-consumer может передать ошибку рендера в Error 
 
 ### Suspense и Error Boundary
 
-Consumer выбирает `useSuspenseQuery`, `useSuspenseInfiniteQuery` или `useSuspenseQueries`. QO должна гарантировать исполняемый `queryFn`: `skipToken`, `enabled` и `placeholderData` в Suspense-consumer не используются. Неготовые обязательные параметры обрабатываются до монтирования компонента, который вызывает Suspense-hook; используются типобезопасная перегрузка QO или отдельная фабрика готового запроса с той же идентичностью ресурса.
+Consumer выбирает `useSuspenseQuery`, `useSuspenseInfiniteQuery` или `useSuspenseQueries`. QO должна гарантировать исполняемый `queryFn`: `skipToken`, `enabled` и `placeholderData` в Suspense-consumer не используются. Неготовые обязательные параметры обрабатываются до монтирования компонента, который вызывает Suspense-hook; используется отдельная фабрика готового запроса с той же идентичностью ресурса.
 
 `Suspense` отвечает за ожидание, Error Boundary — за ошибку. Ошибка query без данных передаётся ближайшему Error Boundary; при наличии данных ошибка refetch по умолчанию допускает продолжение отображения. `throwOnError` Suspense-hook не переопределяется. Если конкретный consumer должен передавать Boundary и фоновые ошибки, он явно выбрасывает `error` после завершения fetching. Это осознанное изменение UI-политики.
 

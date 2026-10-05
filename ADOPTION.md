@@ -24,7 +24,7 @@
 | Ключи | Все влияющие параметры учтены, readonly tuples, именованные объекты параметров, готовые обязательные ID, разные ветки для finite/infinite |
 | QO | Отдельные экспорты, signal передан, optional-QO блокирует неготовые параметры; ready-QO получает подготовленный ввод; обе совместимы с выбранными consumers |
 | Параметры | QK/QO/MO принимают один именованный объект или не имеют параметров; variables mutationFn — объект |
-| Типы | Inference сохраняется через options и select; нет `any` или casts, скрывающих ошибку контракта |
+| Типы | Нет аннотаций возвращаемого типа QO/MO и generic-аргументов options helpers; inference сохраняется из transport и select, нет `any` или скрывающих ошибку casts |
 | MO | Все cache-effects внутри MO, callbacks не перезаписаны consumer, Promise ожидается |
 | Meta | Тип зарегистрирован и executor действительно установлен на используемом клиенте |
 | Aggregation | Только ссылки на QO/MO и чистые функции; нет hooks, keys и side effects |
@@ -83,6 +83,7 @@
 | Consumer вызывает `invalidateQueries` после `mutate` | Перенести эффект в MO |
 | Consumer перезаписывает callback MO | Использовать отдельный UI-callback выполнения, сохраняя lifecycle MO |
 | `queryClient.setQueryData(productDetailQO({ productId: id }).queryKey, value)` | Выполнять доменную запись в MO через QK |
+| Возвращаемый тип QO/MO аннотирован или helper вызван как `queryOptions<Type>` | Следовать [правилу вывода типов фабрик](SPECIFICATION.md#2-модули-и-зависимости); типизировать входные данные и transport |
 | Фабрика принимает `Partial<UseQueryOptions>` | Принимать только параметры ресурса; настройки наблюдателя добавлять в consumer |
 | `enabled: Boolean(id)` внутри QO | Использовать `skipToken` и точную проверку валидности ID |
 | `detail(productId: string \| undefined)` в QK | Принимать `{ productId: string }`; проверять ID в QO до вызова QK |
