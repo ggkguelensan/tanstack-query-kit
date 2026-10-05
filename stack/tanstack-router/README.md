@@ -4,7 +4,7 @@
 
 ## Загрузка и ошибки маршрута
 
-Loader получает QueryClient из router context и передаёт ресурсную QO в `qc.query`, если метод доступен. Свежесть и ожидание выбираются по [императивному контракту](../tanstack-query/README.md#императивное-выполнение). Loader координирует навигацию, Query владеет ресурсным кешем. Ошибка ожидаемого запроса передаётся route `errorComponent`; ошибка рендера может попасть туда через выбранную UI-политику. Механика описана в [External Data Loading](https://tanstack.com/router/latest/docs/guide/external-data-loading).
+Loader получает QueryClient из router context и выбирает обычный либо infinite API согласно форме QO по [императивному контракту](../tanstack-query/README.md#императивное-выполнение). Свежесть и ожидание определяются потребностью маршрута. Loader координирует навигацию, Query владеет ресурсным кешем. Ошибка ожидаемого запроса передаётся route `errorComponent`; ошибка рендера может попасть туда через выбранную UI-политику. Механика описана в [External Data Loading](https://tanstack.com/router/latest/docs/guide/external-data-loading).
 
 Восстановление различает query error reset, повторный рендер boundary и повторный запуск loader. В официальном примере `useQueryErrorResetBoundary` сбрасывается при монтировании error-компонента, а `router.invalidate()` перезапускает loaders и сбрасывает ошибки маршрута. Инвалидация маршрута не заменяет доменный cache-effect MO. Проверьте повторную попытку и уход с ошибочного маршрута с последующим возвратом. [Error handling](https://tanstack.com/router/latest/docs/guide/external-data-loading#error-handling-with-tanstack-query).
 

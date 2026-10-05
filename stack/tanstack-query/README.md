@@ -4,9 +4,18 @@
 
 ## Императивное выполнение
 
-Если установленная версия предоставляет `qc.query`, consumer использует его для императивного чтения и предзагрузки. По умолчанию метод учитывает `staleTime` QO; для чтения любых существующих данных без проверки свежести consumer передаёт `{ ...options, staleTime: 'static' }`. Это замена `ensureQueryData` без `revalidateIfStale`, а не общий cache-policy ресурса. Для версий без `qc.query` допустимы `fetchQuery` и `ensureQueryData` с соответствующей семантикой. Версия API выбирается при внедрении; runtime-проверка наличия метода в каждом consumer не требуется.
+Consumer выбирает API по форме QO. При наличии новых методов используется следующая пара:
 
-`qc.query` отклоняет Promise при ошибке: loader передаёт её framework adapter, а необязательная предзагрузка явно обрабатывает rejection. Одного `void qc.query(...)` недостаточно для обработки ошибки. Выбор ожидания, обработки ошибок и политики свежести принадлежит consumer. Семантика методов описана в [QueryClient](https://tanstack.com/query/latest/docs/framework/react/reference/classes/QueryClient).
+| QO | Чтение с политикой свежести QO | Чтение любых имеющихся данных | API предыдущих версий |
+| --- | --- | --- | --- |
+| Обычная `queryOptions` | `qc.query(options)` | `qc.query({ ...options, staleTime: 'static' })` | `fetchQuery` / `ensureQueryData` |
+| `infiniteQueryOptions` | `qc.infiniteQuery(options)` | `qc.infiniteQuery({ ...options, staleTime: 'static' })` | `fetchInfiniteQuery` / `ensureInfiniteQueryData` |
+
+Чтение с `staleTime: 'static'` заменяет соответствующий ensure-метод без `revalidateIfStale`; это выбор consumer, а не общий cache-policy ресурса. Для версий без новых методов используются соответствующие API предыдущих версий с их семантикой. Версия API выбирается при внедрении; runtime-проверка наличия метода в каждом consumer не требуется.
+
+Infinite QO не передаётся в `qc.query`: обычное выполнение не организует `pageParam` и не сохраняет `InfiniteData`. Серверный loader и браузерный observer должны использовать совместимую форму кэша; пример обоих вариантов — в [каталоге](../react/catalog.md#loader-как-consumer).
+
+`qc.query` и `qc.infiniteQuery` отклоняют Promise при ошибке: loader передаёт её framework adapter, а необязательная предзагрузка явно обрабатывает rejection. Одного `void` недостаточно. Выбор ожидания, обработки ошибок и свежести принадлежит consumer. Семантика методов описана в [QueryClient](https://tanstack.com/query/latest/docs/framework/react/reference/classes/QueryClient).
 
 ## Свежесть и хранение
 

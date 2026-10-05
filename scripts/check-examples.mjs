@@ -14,31 +14,10 @@ try {
       await writeFile(join(source, match[1]), match[2]);
     }
   }
-  // Transport declarations in the documentation have no runtime implementation.
-  // Only this disposable fixture supplies a transport for behavioral checks.
-  await writeFile(join(source, 'catalog.transport.ts'), `
-import type { Product, ProductListParams, CreateProductRequest, RenameProductRequest } from './catalog.types';
-export const calls = { reads: 0, writes: 0 };
-export const getProduct = async (productId: string, _options: { signal: AbortSignal }): Promise<Product> => {
-  calls.reads++;
-  return { id: productId, name: 'Product', status: 'published', categoryId: 'c1' };
-};
-export const getCategory = async (_id: string, _options: { signal: AbortSignal }) => ({ id: 'c1', name: 'Category' });
-export const getProducts = async (_params: ProductListParams, _options: { signal: AbortSignal }): Promise<Product[]> => [];
-export const getProductPage = async (_params: ProductListParams & { cursor: string | null }, _options: { signal: AbortSignal }) => ({ items: [] as Product[], nextCursor: null as string | null });
-export const createProduct = async (variables: CreateProductRequest): Promise<Product> => {
-  calls.writes++;
-  return { id: 'p1', name: variables.name, status: 'published' };
-};
-export const renameProduct = async (variables: RenameProductRequest): Promise<Product> => {
-  calls.writes++;
-  return { id: variables.productId, name: variables.name, status: 'published' };
-};
-`);
   await writeFile(join(source, 'consumer-types.tsx'), `
-import { useQuery, useQueries, useSuspenseQuery, useInfiniteQuery, QueryClient } from '@tanstack/react-query';
+import { useQuery, useQueries, useSuspenseQuery, useInfiniteQuery, QueryClient, type InfiniteData } from '@tanstack/react-query';
 import { productDetailQO, productRequiredDetailQO, productListQO, productInfiniteQO } from './product.qo';
-import type { Product } from './catalog.types';
+import type { Product, ProductPage } from './catalog.types';
 export function Contracts() {
   const optional = useQuery(productDetailQO({ productId: undefined }));
   const optionalData: Product | undefined = optional.data;
@@ -55,6 +34,7 @@ export function Contracts() {
   return null;
 }
 export const imperative: Promise<Product> = new QueryClient().query(productRequiredDetailQO({ productId: 'p1' }));
+export const infiniteImperative: Promise<InfiniteData<ProductPage, string | null>> = new QueryClient().infiniteQuery(productInfiniteQO({ search: '', pageSize: 10 }));
 `);
   await writeFile(join(workspace, 'package.json'), JSON.stringify({ private: true }));
   execFileSync('npm', ['install', '--no-audit', '--no-fund', '--no-package-lock',
@@ -66,16 +46,37 @@ export const imperative: Promise<Product> = new QueryClient().query(productRequi
     jsx: 'react-jsx', skipLibCheck: true, outDir: 'dist',
   }, include: ['src'] }));
   execFileSync(process.execPath, [join(workspace, 'node_modules/typescript/bin/tsc'), '--project', workspace], { stdio: 'inherit' });
+  // Typecheck the published declarations unchanged. Only emitted runtime code
+  // receives a fixture; this does not replace the types consumed by QO/MO/UI.
+  await writeFile(join(workspace, 'dist/catalog.transport.js'), `
+const calls = exports.calls = { reads: 0, writes: 0 };
+exports.getProduct = async (productId) => {
+  calls.reads++;
+  return { id: productId, name: 'Product', status: 'published', categoryId: 'c1' };
+};
+exports.getCategory = async () => ({ id: 'c1', name: 'Category' });
+exports.getProducts = async () => [];
+exports.getProductPage = async () => ({ items: [], nextCursor: null });
+exports.createProduct = async (variables) => {
+  calls.writes++;
+  return { id: 'p1', name: variables.name, status: 'published' };
+};
+exports.renameProduct = async (variables) => {
+  calls.writes++;
+  return { id: variables.productId, name: variables.name, status: 'published' };
+};
+`);
   await writeFile(join(workspace, 'behavior.cjs'), `
 const assert = require('node:assert/strict');
-const { QueryClient, QueryObserver, MutationObserver } = require('@tanstack/react-query');
+const { QueryClient, QueryObserver, InfiniteQueryObserver, MutationObserver } = require('@tanstack/react-query');
 const { createElement } = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { QueryClientProvider } = require('@tanstack/react-query');
 const { createQueryClient } = require('./dist/query-client');
 const { productQK } = require('./dist/product.qk');
 const { categoryQK } = require('./dist/category.qk');
-const { productDetailQO, productRequiredDetailQO } = require('./dist/product.qo');
+const { productDetailQO, productRequiredDetailQO, productInfiniteQO } = require('./dist/product.qo');
+const { loadProductFeed } = require('./dist/product-loader');
 const { productCreateMO } = require('./dist/product.mo');
 const { ProductPanel } = require('./dist/product-panel');
 const { productRenameWithRequiredRefreshMO } = require('./dist/product-rename-refresh.mo');
@@ -92,6 +93,14 @@ const client = createQueryClient();
   await client.query(productRequiredDetailQO({ productId: 'p1' }));
   assert.equal(calls.reads, 1);
   stopBlocked();
+
+  const feedParams = { search: 'feed', pageSize: 10 };
+  await loadProductFeed(client, feedParams);
+  const feed = new InfiniteQueryObserver(client, productInfiniteQO(feedParams));
+  const stopFeed = feed.subscribe(() => {});
+  // The loader must populate the shape consumed by an infinite observer.
+  assert.equal(feed.getCurrentResult().data.pages[0].items.length, 0);
+  stopFeed();
 
   const key = productQK.list({ search: '', pageSize: 10 });
   client.setQueryData(key, []);
@@ -165,7 +174,7 @@ const client = createQueryClient();
   assert.ok(render().includes('Не удалось загрузить категорию'));
 
   client.clear();
-  console.log('PASS: inferred types, readiness, overlapping/empty plans, confirmed-write failure, error classification, category visibility');
+  console.log('PASS: inferred types, readiness, infinite loader/observer, overlapping/empty plans, confirmed-write failure, error classification, category visibility');
 })().catch(error => { client.clear(); console.error(error); process.exitCode = 1; });
 `);
   execFileSync(process.execPath, ['behavior.cjs'], { cwd: workspace, stdio: 'inherit', timeout: 30000 });

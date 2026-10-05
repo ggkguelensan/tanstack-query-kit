@@ -8,7 +8,7 @@
 
 | Вариант | Что исполняется | Что наблюдает Effector |
 | --- | --- | --- |
-| Effect вызывает `qc.query(QO)` | Одно императивное чтение через Query cache | Promise этого вызова: pending, done, fail |
+| Effect вызывает `qc.query` с обычной QO | Одно императивное чтение через Query cache | Promise этого вызова: pending, done, fail |
 | Adapter подписывает `QueryObserver` на QO | Реактивный lifecycle ресурса | Изменения query result, включая fetching и фоновое обновление |
 | Adapter вызывает `MutationObserver.mutate` с MO | Mutation lifecycle с callbacks и MutationCache | Promise операции и состояние наблюдаемой мутации |
 | React-consumer использует hooks | Observers принадлежат React adapter | Effector управляет сценарием и UI-state; подписка ресурса остаётся в React |
@@ -19,7 +19,7 @@
 
 ## Императивный шаг через effect
 
-Направление зависимости: событие сценария → effect-consumer → `qc.query(QO)` → transport. Effect может передать результат мапперу или следующей операции. Семантика свежести и ошибок описана в [TanStack Query](../tanstack-query/README.md#императивное-выполнение).
+Ниже показан шаг с обычной QO; для infinite QO выбирается соответствующий API по ссылке ниже. Направление зависимости: событие сценария → effect-consumer → `qc.query(QO)` → transport. Effect может передать результат мапперу или следующей операции. Семантика свежести и ошибок описана в [TanStack Query](../tanstack-query/README.md#императивное-выполнение).
 
 `qc.query` строит или использует запись QueryCache и запускает её fetch при необходимости. Запись хранит состояние выполнения и уведомляет уже существующих observers, но вызов не создаёт собственного QueryObserver. Его Promise завершается и не подписывает effect на последующие изменения ресурса. [QueryClient.query](https://tanstack.com/query/latest/docs/framework/react/reference/classes/QueryClient#query).
 

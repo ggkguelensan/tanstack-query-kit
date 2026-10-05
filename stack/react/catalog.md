@@ -367,7 +367,8 @@ export const ProductPanel = ({ productId, isPanelOpen, onRenamed }: ProductPanel
 
 ```ts
 import type { QueryClient } from '@tanstack/react-query';
-import { productRequiredDetailQO } from './product.qo';
+import { productInfiniteQO, productRequiredDetailQO } from './product.qo';
+import type { ProductListParams } from './catalog.types';
 
 export const loadProduct = async (qc: QueryClient, productId: string) => {
   return qc.query({
@@ -375,9 +376,14 @@ export const loadProduct = async (qc: QueryClient, productId: string) => {
     staleTime: 'static',
   });
 };
+
+export const loadProductFeed = (qc: QueryClient, params: ProductListParams) =>
+  qc.infiniteQuery(productInfiniteQO(params));
 ```
 
-Framework adapter передаёт request-scoped client на сервере или стабильный client в браузере. Здесь сознательно допускается чтение любых существующих данных: `qc.query` с `staleTime: 'static'` заменяет прежний `ensureQueryData` без `revalidateIfStale`. Если loader должен дождаться обновления устаревшего ресурса, он передаёт QO в `qc.query` без этого override, сохраняя `staleTime` ресурса. Для установленной версии без `qc.query` используется `ensureQueryData` в первом сценарии или `fetchQuery` во втором; это выбор API при внедрении, а не runtime-ветвление loader. Ошибка загрузки отклоняет Promise и передаётся framework adapter.
+Framework adapter передаёт request-scoped client на сервере или стабильный client в браузере. `loadProduct` сознательно допускает чтение любых существующих данных через `staleTime: 'static'`. Если loader должен дождаться обновления устаревшего ресурса, consumer передаёт QO без этого override, сохраняя ресурсную свежесть.
+
+`loadProductFeed` организует страницы и сохраняет форму `InfiniteData`, совместимую с `useInfiniteQuery`. API для обычных и infinite QO, включая выбор методов предыдущих версий, приведены в [таблице методов](../tanstack-query/README.md#императивное-выполнение). Ошибка загрузки отклоняет Promise и передаётся framework adapter.
 
 ## Другие consumer-сценарии
 
