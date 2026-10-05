@@ -121,19 +121,21 @@ Consumer передаёт options целиком: `useQuery(productDetailQO({ pr
 7. `staleTime` и `gcTime` выбираются по свойствам ресурса. Их нельзя увеличивать только для сокрытия случайных повторных запросов.
 
 ```ts
+import type { DefaultError } from '@tanstack/react-query';
+
 type ProductDetailKey =
   | ReturnType<typeof productQK.detail>
   | ReturnType<typeof productQK.unavailableDetail>;
 
 export const productDetailQO = ({ productId }: { productId: string | undefined }) => {
   if (!productId) {
-    return queryOptions<Product, Error, Product, ProductDetailKey>({
+    return queryOptions<Product, DefaultError, Product, ProductDetailKey>({
       queryKey: productQK.unavailableDetail(),
       queryFn: skipToken,
     });
   }
 
-  return queryOptions<Product, Error, Product, ProductDetailKey>({
+  return queryOptions<Product, DefaultError, Product, ProductDetailKey>({
     queryKey: productQK.detail({ productId }),
     queryFn: ({ signal }) => getProduct(productId, { signal }),
   });
@@ -240,7 +242,48 @@ Router loader и preloader находятся вне Kit. Они использ�
 
 Для SSR создаётся отдельный `QueryClient` на серверный request; общий серверный singleton запрещён. Все consumers одного request используют один request-scoped client. В браузере экземпляр клиента стабилен. Dehydration/hydration, безопасная сериализация и обработка ошибок относятся к framework adapter.
 
-## 8. Инфраструктура кэша
+## 8. Ошибки и восстановление
+
+### Контракт и типы
+
+Transport adapter обязан отклонить Promise или выбросить ошибку при неуспешной операции, включая HTTP-ошибку и ошибку валидации ответа. `.qo` и `.mo` не превращают ошибку в успешные пустые данные. Проверка `response.ok` для `fetch` принадлежит transport. См. [Query Functions](https://tanstack.com/query/latest/docs/framework/react/guides/query-functions).
+
+Приложение определяет форму ошибки и чистые функции её распознавания. Kit не навязывает HTTP-клиент или классификацию только по статусам. Общий тип регистрируется через `Register.defaultError`; при необходимости обязательного narrowing используется `unknown`. Явные generic-параметры QO/MO используют `DefaultError`, а не фиксированный `Error`. Регистрация влияет на типы и не преобразует ошибки в runtime. См. [TypeScript](https://tanstack.com/query/latest/docs/framework/react/typescript#registering-a-global-error).
+
+| Уровень | Ответственность за ошибки |
+| --- | --- |
+| Transport | Неуспешный Promise и нормализация ошибок согласно контракту приложения |
+| QO | Сохранение ошибки запроса, ресурсная политика retry при необходимости |
+| MO | Сохранение ошибки операции, обязательный rollback и согласование кэша |
+| Aggregation | Чистые сценарные классификаторы ошибок без уведомлений и исполнения |
+| Consumer / framework adapter | Inline-состояния, Error Boundary, выбор `throwOnError`, восстановление UI |
+| Инфраструктура | Общая политика retry, мониторинг и уведомления на уровне кэша |
+
+### Обычные queries и фоновые ошибки
+
+При первой загрузке без данных consumer отображает ошибку локально или передаёт её Error Boundary через `throwOnError`. Эта настройка относится к consumer либо общей UI-политике приложения и не задаётся в QO/MO. Consumer может передать boolean или чистый predicate, не изменяя callbacks MO.
+
+Ошибка фонового refetch не должна автоматически скрывать доступные данные: consumer сначала учитывает наличие `data`, затем показывает предупреждение об обновлении. Для обычных queries политика, сохраняющая такой UI при Error Boundary, может использовать `throwOnError: (_error, query) => query.state.data === undefined`. Это выбранное правило Kit, а не универсальный default библиотеки. Основание: [TkDodo — Status Checks](https://tkdodo.eu/blog/status-checks-in-react-query).
+
+Общие уведомления и мониторинг queries выполняются через `QueryCache`, чтобы один неуспешный запрос не порождал уведомление для каждого observer. В v5 у `useQuery` нет `onError`; эффект в каждом consumer не заменяет общую обработку. Приложение выбирает один канал уведомления для одной ошибки; inline-представление и telemetry могут сосуществовать. Пример глобальных уведомлений о фоновых ошибках — в [каталоге](examples/catalog.md). См. [TkDodo — Breaking React Query's API](https://tkdodo.eu/blog/breaking-react-querys-api-on-purpose).
+
+### Suspense и Error Boundary
+
+Consumer выбирает `useSuspenseQuery`, `useSuspenseInfiniteQuery` или `useSuspenseQueries`. QO должна гарантировать исполняемый `queryFn`: `skipToken`, `enabled` и `placeholderData` в Suspense-consumer не используются. Неготовые обязательные параметры обрабатываются до монтирования компонента, который вызывает Suspense-hook; используются типобезопасная перегрузка QO или отдельная фабрика готового запроса с той же идентичностью ресурса.
+
+`Suspense` отвечает за ожидание, Error Boundary — за ошибку. Ошибка query без данных передаётся ближайшему Error Boundary; при наличии данных ошибка refetch по умолчанию допускает продолжение отображения. `throwOnError` Suspense-hook не переопределяется. Если конкретный consumer должен передавать Boundary и фоновые ошибки, он явно выбрасывает `error` после завершения fetching. Это осознанное изменение UI-политики.
+
+Повторная попытка связывает `QueryErrorResetBoundary` с `ErrorBoundary.onReset`. Кнопка восстановления вызывает `resetErrorBoundary`; сброс ошибки query и повторный рендер работают совместно. Область Boundary выбирается по области UI, которая может отказать независимо. При смене ресурса consumer определяет сброс Boundary, например через `resetKeys`. Код показан в [примере ошибок и Suspense](examples/errors-and-suspense.md). Механика: [TanStack Query — Suspense](https://tanstack.com/query/latest/docs/framework/react/guides/suspense).
+
+### Мутации, retry и императивные consumers
+
+Ожидаемые ошибки мутации отображаются рядом с формой; consumer может направлять выбранные ошибки в Boundary через `useMutation({ ...operationMO(), throwOnError })`. Мутация не становится Suspense-загрузкой: pending-состоянием управляет consumer. Query reset не заменяет сброс мутации через `mutation.reset()` или её размонтирование. Повтор записи после ошибки — явное действие; автоматический retry допускается только при определённом контракте повторяемости операции. `mutateAsync` отклоняет Promise, поэтому consumer обязан обработать его; `throwOnError` не заменяет `catch`. См. [useMutation](https://tanstack.com/query/latest/docs/framework/react/reference/useMutation).
+
+`.mo` сохраняет обязательный rollback независимо от UI-обработки. Ошибка записи и ошибка последующего refetch — разные события: неудача согласования кэша сама по себе не доказывает, что серверная запись не состоялась. Приложение не повторяет запись автоматически лишь из-за ошибки refetch.
+
+Loader и preloader обрабатывают ошибки согласно семантике императивного API и передают их framework adapter. React Boundary не ловит произвольный отклонённый Promise обработчика события. Retry-политика учитывает тип ошибки, предел попыток и возможность повторного выполнения операции; её источник — общие defaults либо ресурсная QO/MO, UI не дублирует её.
+
+## 9. Инфраструктура кэша
 
 - `staleTime` регулирует свежесть; `gcTime` — время хранения неиспользуемого кэша. Kit требует `gcTime >= staleTime`; это выбранное соглашение, а не проверка TanStack Query.
 - Для визуальной заглушки используется `placeholderData`.
@@ -249,6 +292,6 @@ Router loader и preloader находятся вне Kit. Они использ�
 - При смене пользователя или области доступа инфраструктура изолирует либо очищает соответствующий кэш. Секреты и access tokens не входят в keys.
 - Настройки retry, persistence и обработки ошибок определяются приложением с учётом поведения transport.
 
-## 9. Критерий соответствия
+## 10. Критерий соответствия
 
 Реализация соответствует Kit, когда соблюдает границы модулей, сохраняет единственную идентичность каждого ресурса и выполняет полный cache-effect мутации независимо от наличия UI-наблюдателя. Проверяемые сценарии приведены в [руководстве внедрения](ADOPTION.md).

@@ -8,6 +8,7 @@
 | --- | --- |
 | [Спецификация](SPECIFICATION.md) | Обязательные правила, зависимости и границы модулей |
 | [Сквозной пример](examples/catalog.md) | Каталог товаров: keys, queries, mutations, aggregation, UI и инфраструктура |
+| [Ошибки и Suspense](examples/errors-and-suspense.md) | Типы ошибок, готовая QO, Error Boundary и восстановление |
 | [Внедрение и ревью](ADOPTION.md) | Порядок внедрения и проверяемые критерии |
 
 ## Четыре вида модулей

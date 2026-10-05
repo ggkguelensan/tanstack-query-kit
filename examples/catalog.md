@@ -99,10 +99,13 @@ export const categoryQK = {
 `product.qo.ts`
 
 ```ts
+import type { DefaultError } from '@tanstack/react-query';
 import { infiniteQueryOptions, queryOptions, skipToken } from '@tanstack/react-query';
 import { getProduct, getProductPage, getProducts } from './catalog.transport';
 import type { Product, ProductListParams } from './catalog.types';
 import { productQK } from './product.qk';
+
+const productDetailCachePolicy = { staleTime: 30_000, gcTime: 300_000 } as const;
 
 type ProductDetailKey =
   | ReturnType<typeof productQK.detail>
@@ -110,19 +113,28 @@ type ProductDetailKey =
 
 export const productDetailQO = ({ productId }: { productId: string | undefined }) => {
   if (!productId) {
-    return queryOptions<Product, Error, Product, ProductDetailKey>({
+    return queryOptions<Product, DefaultError, Product, ProductDetailKey>({
       queryKey: productQK.unavailableDetail(),
       queryFn: skipToken,
-      staleTime: 30_000,
-      gcTime: 300_000,
+      ...productDetailCachePolicy,
     });
   }
 
-  return queryOptions<Product, Error, Product, ProductDetailKey>({
+  return queryOptions<Product, DefaultError, Product, ProductDetailKey>({
     queryKey: productQK.detail({ productId }),
     queryFn: ({ signal }) => getProduct(productId, { signal }),
-    staleTime: 30_000,
-    gcTime: 300_000,
+    ...productDetailCachePolicy,
+  });
+};
+
+// Для consumers, которым обязательные параметры уже доступны.
+export const productRequiredDetailQO = ({ productId }: { productId: string }) => {
+  if (!productId) throw new Error('Product ID is required');
+
+  return queryOptions({
+    queryKey: productQK.detail({ productId }),
+    queryFn: ({ signal }) => getProduct(productId, { signal }),
+    ...productDetailCachePolicy,
   });
 };
 
@@ -149,6 +161,7 @@ export const productInfiniteQO = (params: ProductListParams) =>
 `category.qo.ts`
 
 ```ts
+import type { DefaultError } from '@tanstack/react-query';
 import { queryOptions, skipToken } from '@tanstack/react-query';
 import { getCategory } from './catalog.transport';
 import type { Category } from './catalog.types';
@@ -160,7 +173,7 @@ type CategoryDetailKey =
 
 export const categoryDetailQO = ({ categoryId }: { categoryId: string | undefined }) => {
   if (!categoryId) {
-    return queryOptions<Category, Error, Category, CategoryDetailKey>({
+    return queryOptions<Category, DefaultError, Category, CategoryDetailKey>({
       queryKey: categoryQK.unavailableDetail(),
       queryFn: skipToken,
       staleTime: 60_000,
@@ -168,7 +181,7 @@ export const categoryDetailQO = ({ categoryId }: { categoryId: string | undefine
     });
   }
 
-  return queryOptions<Category, Error, Category, CategoryDetailKey>({
+  return queryOptions<Category, DefaultError, Category, CategoryDetailKey>({
     queryKey: categoryQK.detail({ categoryId }),
     queryFn: ({ signal }) => getCategory(categoryId, { signal }),
     staleTime: 60_000,
@@ -176,6 +189,8 @@ export const categoryDetailQO = ({ categoryId }: { categoryId: string | undefine
   });
 };
 ```
+
+`productRequiredDetailQO` сохраняет тот же detail-ключ и форму данных, но не допускает `skipToken`. Она подходит для Suspense и для императивного consumer с готовым ID. Пустая строка нарушает её контракт; обычная `productDetailQO` выражает неготовность через технический ключ и early return.
 
 Значения времени иллюстративны. В реальном приложении они выбираются по допустимому возрасту данных.
 
@@ -202,10 +217,18 @@ declare module '@tanstack/react-query' {
 `query-client.ts`
 
 ```ts
-import { MutationCache, QueryClient } from '@tanstack/react-query';
+import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 import './mutation-meta';
 
-export const createQueryClient = (): QueryClient => {
+export const createQueryClient = (
+  { onBackgroundError }: { onBackgroundError?: (error: unknown) => void } = {},
+): QueryClient => {
+  const queryCache = new QueryCache({
+    onError: (error, query) => {
+      if (query.state.data === undefined) return;
+      onBackgroundError?.(error);
+    },
+  });
   const mutationCache = new MutationCache({
     onSuccess: async (_data, _variables, _onMutateResult, mutation, context) => {
       await Promise.all(
@@ -216,9 +239,11 @@ export const createQueryClient = (): QueryClient => {
     },
   });
 
-  return new QueryClient({ mutationCache });
+  return new QueryClient({ queryCache, mutationCache });
 };
 ```
+
+Браузерный adapter может передать `onBackgroundError` для общего уведомления; серверный adapter не передаёт UI-callback. Ошибку первой загрузки отображает consumer или Boundary. Подписчики одной query не создают отдельные уведомления о фоновой ошибке.
 
 Исполнитель знает только список префиксов. При отсутствии плана он ничего не делает. Фабрика клиента вызывается один раз на серверный request или при создании стабильного браузерного клиента, а не при каждом рендере.
 
@@ -308,7 +333,9 @@ export const ProductPanel = ({ productId, isPanelOpen, onRenamed }: ProductPanel
 
   if (!isPanelOpen) return null;
   if (!productId) return <p>Выберите товар</p>;
-  if (productQuery.isError) return <p>Не удалось загрузить товар</p>;
+  if (productQuery.isError && productQuery.data === undefined) {
+    return <p>Не удалось загрузить товар</p>;
+  }
   if (!productQuery.data) return <p>Загрузка…</p>;
 
   const product = productQuery.data;
@@ -317,6 +344,7 @@ export const ProductPanel = ({ productId, isPanelOpen, onRenamed }: ProductPanel
   return (
     <section>
       <h1>{view.title}</h1>
+      {productQuery.isRefetchError && <p>Не удалось обновить товар</p>}
       {view.categoryName && <p>{view.categoryName}</p>}
       {categoryQuery.isFetching && <p>Загрузка категории…</p>}
       {categoryQuery.isError && <p>Не удалось загрузить категорию</p>}
@@ -343,11 +371,11 @@ export const ProductPanel = ({ productId, isPanelOpen, onRenamed }: ProductPanel
 
 ```ts
 import type { QueryClient } from '@tanstack/react-query';
-import { productDetailQO } from './product.qo';
+import { productRequiredDetailQO } from './product.qo';
 
 export const loadProduct = async (client: QueryClient, productId: string) => {
   if (!productId) throw new Error('Product ID is required');
-  return client.ensureQueryData(productDetailQO({ productId }));
+  return client.ensureQueryData(productRequiredDetailQO({ productId }));
 };
 ```
 
