@@ -107,27 +107,24 @@ import { getProduct, getProductPage, getProducts } from './catalog.transport';
 import type { ProductListParams } from './catalog.types';
 import { productQK } from './product.qk';
 
-const productDetailCachePolicy = { staleTime: 30_000, gcTime: 300_000 } as const;
+export const productDetailQO = ({ productId }: { productId: string | undefined }) =>
+  queryOptions((() => {
+    if (!productId) {
+      return {
+        queryKey: productQK.unavailableDetail(),
+        queryFn: skipToken,
+        staleTime: 30_000,
+        gcTime: 300_000,
+      } as const;
+    }
 
-const resolveProductDetailOptionsParts = ({ productId }: { productId: string | undefined }) => {
-  if (!productId) {
     return {
-      queryKey: productQK.unavailableDetail(),
-      queryFn: skipToken,
-    } as const;
-  }
-
-  return {
-    queryKey: productQK.detail({ productId }),
-    queryFn: ({ signal }: QueryFunctionContext) => getProduct(productId, { signal }),
-  };
-};
-
-export const productDetailQO = (params: { productId: string | undefined }) =>
-  queryOptions({
-    ...resolveProductDetailOptionsParts(params),
-    ...productDetailCachePolicy,
-  });
+      queryKey: productQK.detail({ productId }),
+      queryFn: ({ signal }: QueryFunctionContext) => getProduct(productId, { signal }),
+      staleTime: 30_000,
+      gcTime: 300_000,
+    };
+  })());
 
 // Для consumers, которым обязательные параметры уже доступны.
 export const productRequiredDetailQO = ({ productId }: { productId: string }) => {
@@ -136,7 +133,8 @@ export const productRequiredDetailQO = ({ productId }: { productId: string }) =>
   return queryOptions({
     queryKey: productQK.detail({ productId }),
     queryFn: ({ signal }) => getProduct(productId, { signal }),
-    ...productDetailCachePolicy,
+    staleTime: 30_000,
+    gcTime: 300_000,
   });
 };
 
@@ -168,29 +166,27 @@ import { queryOptions, skipToken } from '@tanstack/react-query';
 import { getCategory } from './catalog.transport';
 import { categoryQK } from './category.qk';
 
-const resolveCategoryDetailOptionsParts = ({ categoryId }: { categoryId: string | undefined }) => {
-  if (!categoryId) {
+export const categoryDetailQO = ({ categoryId }: { categoryId: string | undefined }) =>
+  queryOptions((() => {
+    if (!categoryId) {
+      return {
+        queryKey: categoryQK.unavailableDetail(),
+        queryFn: skipToken,
+        staleTime: 60_000,
+        gcTime: 300_000,
+      } as const;
+    }
+
     return {
-      queryKey: categoryQK.unavailableDetail(),
-      queryFn: skipToken,
-    } as const;
-  }
-
-  return {
-    queryKey: categoryQK.detail({ categoryId }),
-    queryFn: ({ signal }: QueryFunctionContext) => getCategory(categoryId, { signal }),
-  };
-};
-
-export const categoryDetailQO = (params: { categoryId: string | undefined }) =>
-  queryOptions({
-    ...resolveCategoryDetailOptionsParts(params),
-    staleTime: 60_000,
-    gcTime: 300_000,
-  });
+      queryKey: categoryQK.detail({ categoryId }),
+      queryFn: ({ signal }: QueryFunctionContext) => getCategory(categoryId, { signal }),
+      staleTime: 60_000,
+      gcTime: 300_000,
+    };
+  })());
 ```
 
-Resolver `...OptionsParts` возвращает только `queryKey` и `queryFn` и остаётся приватной частью `.qo`: early return выбирает технический ключ до вызова конкретного QK. `queryOptions` вызывается один раз после выбора ветки и выводит тип данных из исполняемого `queryFn`; `as const` сохраняет `skipToken` как unique symbol. Типы ответа и ключа не передаются в generics.
+Каждая ветка содержит полный конфиг: совпадение `staleTime` и `gcTime` само по себе не требует общей `Policy` или `Parts`. Inline-функция выбирает конфиг через early return; внешний `queryOptions` выводит общий тип данных и ключа из выбранных значений. Два отдельных вызова `queryOptions` в ветках дают несовместимое объединение options на проверенной версии; inline-выбор сохраняет inference без явных generics. `as const` сохраняет `skipToken` как unique symbol.
 
 `productRequiredDetailQO` сохраняет тот же detail-ключ и форму данных, но не допускает `skipToken`. Она подходит для Suspense и для императивного consumer с готовым ID. Пустая строка нарушает её контракт; обычная `productDetailQO` выражает неготовность через технический ключ и early return.
 
