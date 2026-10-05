@@ -373,13 +373,16 @@ export const ProductPanel = ({ productId, isPanelOpen, onRenamed }: ProductPanel
 import type { QueryClient } from '@tanstack/react-query';
 import { productRequiredDetailQO } from './product.qo';
 
-export const loadProduct = async (client: QueryClient, productId: string) => {
+export const loadProduct = async (qc: QueryClient, productId: string) => {
   if (!productId) throw new Error('Product ID is required');
-  return client.ensureQueryData(productRequiredDetailQO({ productId }));
+  return qc.query({
+    ...productRequiredDetailQO({ productId }),
+    staleTime: 'static',
+  });
 };
 ```
 
-Framework adapter передаёт request-scoped client на сервере или стабильный client в браузере. Здесь сознательно допускается чтение существующих данных через `ensureQueryData`; если loader должен дождаться обновления устаревшего ресурса, выбирается `fetchQuery` с подходящим `staleTime`.
+Framework adapter передаёт request-scoped client на сервере или стабильный client в браузере. Здесь сознательно допускается чтение любых существующих данных: `qc.query` с `staleTime: 'static'` заменяет прежний `ensureQueryData` без `revalidateIfStale`. Если loader должен дождаться обновления устаревшего ресурса, он передаёт QO в `qc.query` без этого override, сохраняя `staleTime` ресурса. Для установленной версии без `qc.query` используется `ensureQueryData` в первом сценарии или `fetchQuery` во втором; это выбор API при внедрении, а не runtime-ветвление loader. Ошибка загрузки отклоняет Promise и передаётся framework adapter.
 
 ## Другие consumer-сценарии
 

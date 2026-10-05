@@ -102,7 +102,7 @@ Consumer запрещено:
 - принимать ключ отдельным аргументом для обхода границы;
 - выполнять доменную invalidation после мутации.
 
-Consumer передаёт options целиком: `useQuery(productDetailQO({ productId: id }))`, `queryClient.fetchQuery(productDetailQO({ productId: id }))`, `queryClient.ensureQueryData(productDetailQO({ productId: id }))`. API, которым требуется отдельный ключ для доменной записи в кэш, используется внутри `.mo`.
+Consumer передаёт options целиком: `useQuery(productDetailQO({ productId: id }))`, `qc.query(productRequiredDetailQO({ productId: id }))`. API, которым требуется отдельный ключ для доменной записи в кэш, используется внутри `.mo`.
 
 ## 4. Query options: `.qo.ts`
 
@@ -150,9 +150,9 @@ export const productDetailQO = ({ productId }: { productId: string | undefined }
 
 `skipToken` — техническая блокировка, `enabled` — решение consumer о запуске. Они не взаимозаменяемы. Ручной `refetch()` не запускает запрос с `skipToken`; см. [Disabling Queries](https://tanstack.com/query/latest/docs/framework/react/guides/disabling-queries).
 
-Для `fetchQuery` / `ensureQueryData` / предзагрузки consumer сначала получает валидные параметры. `enabled` не является механизмом защиты императивного API. Suspense-consumer требует options с гарантированным `queryFn`: если QO допускает `skipToken`, для обязательных параметров нужна типобезопасная перегрузка или отдельная фабрика.
+Для `qc.query` / совместимых императивных методов / предзагрузки consumer сначала получает валидные параметры. `enabled` не является механизмом защиты императивного API. Suspense-consumer требует options с гарантированным `queryFn`: если QO допускает `skipToken`, для обязательных параметров нужна типобезопасная перегрузка или отдельная фабрика.
 
-`select` изменяет результат наблюдателя, а не данные в кэше. Преобразование, которое должно менять именно хранимую форму данных, выполняется до возврата результата `queryFn`. Один ключ не может обозначать несовместимые формы данных.
+`select` изменяет результат consumer — наблюдателя или `qc.query` — без изменения данных в кэше. Преобразование, которое должно менять именно хранимую форму данных, выполняется до возврата результата `queryFn`. Один ключ не может обозначать несовместимые формы данных.
 
 ### Infinite queries
 
@@ -238,7 +238,9 @@ Consumer использует QO/MO/Aggregation напрямую. Hook, кото
 
 Consumer владеет hooks, `enabled`, преобразованием `select` для экрана, UI-errors и UI-effects. Для динамической коллекции consumer передаёт QO в `useQueries`; hooks нельзя вызывать в цикле. Независимые загрузки можно запускать параллельно; зависимый запрос получает параметры из результата предыдущего.
 
-Router loader и preloader находятся вне Kit. Они используют те же QO, что и UI. Выбор `fetchQuery`, `prefetchQuery`, `ensureQueryData`, ожидания и политики свежести относится к конкретному lifecycle: эти методы имеют разную семантику ошибок и повторной загрузки.
+Router loader и preloader находятся вне Kit. Они используют те же QO, что и UI. Если установленная версия предоставляет `qc.query`, consumer использует его для императивного чтения и предзагрузки. По умолчанию метод учитывает `staleTime` QO; для чтения любых существующих данных без проверки свежести consumer передаёт `{ ...options, staleTime: 'static' }`. Это замена `ensureQueryData` без `revalidateIfStale`, а не общий cache-policy ресурса. Для версий без `qc.query` допустимы `fetchQuery` и `ensureQueryData` с соответствующей семантикой. Версия API выбирается при внедрении; runtime-проверка наличия метода в каждом consumer не требуется.
+
+`qc.query` отклоняет Promise при ошибке: loader передаёт её framework adapter, а необязательная предзагрузка явно обрабатывает rejection. Одного `void qc.query(...)` недостаточно для обработки ошибки. Выбор ожидания, обработки ошибок и политики свежести принадлежит consumer. Семантика методов описана в [QueryClient](https://tanstack.com/query/latest/docs/framework/react/reference/classes/QueryClient).
 
 Для SSR создаётся отдельный `QueryClient` на серверный request; общий серверный singleton запрещён. Все consumers одного request используют один request-scoped client. В браузере экземпляр клиента стабилен. Dehydration/hydration, безопасная сериализация и обработка ошибок относятся к framework adapter.
 
