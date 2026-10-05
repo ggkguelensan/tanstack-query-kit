@@ -128,8 +128,6 @@ export const productDetailQO = ({ productId }: { productId: string | undefined }
 
 // Для consumers, которым обязательные параметры уже доступны.
 export const productRequiredDetailQO = ({ productId }: { productId: string }) => {
-  if (!productId) throw new Error('Product ID is required');
-
   return queryOptions({
     queryKey: productQK.detail({ productId }),
     queryFn: ({ signal }) => getProduct(productId, { signal }),
@@ -188,7 +186,7 @@ export const categoryDetailQO = ({ categoryId }: { categoryId: string | undefine
 
 Каждая ветка содержит полный конфиг: совпадение `staleTime` и `gcTime` само по себе не требует общей `Policy` или `Parts`. Inline-функция выбирает конфиг через early return; внешний `queryOptions` выводит общий тип данных и ключа из выбранных значений. Два отдельных вызова `queryOptions` в ветках дают несовместимое объединение options на проверенной версии; inline-выбор сохраняет inference без явных generics. `as const` сохраняет `skipToken` как unique symbol.
 
-`productRequiredDetailQO` сохраняет тот же detail-ключ и форму данных, но не допускает `skipToken`. Она подходит для Suspense и для императивного consumer с готовым ID. Пустая строка нарушает её контракт; обычная `productDetailQO` выражает неготовность через технический ключ и early return.
+`productRequiredDetailQO` сохраняет тот же detail-ключ и форму данных, но не допускает `skipToken`. Она подходит для Suspense и для императивного consumer с готовым ID. Проверка внешнего ввода выполняется до вызова ready-QO: она принимает уже подготовленный ID и не повторяет guard. `string` исключает `undefined`, но сам по себе допускает пустую строку; готовность ID является контрактом consumer. Обычная `productDetailQO` выражает неготовность через технический ключ и early return.
 
 Значения времени иллюстративны. В реальном приложении они выбираются по допустимому возрасту данных.
 
@@ -372,7 +370,6 @@ import type { QueryClient } from '@tanstack/react-query';
 import { productRequiredDetailQO } from './product.qo';
 
 export const loadProduct = async (qc: QueryClient, productId: string) => {
-  if (!productId) throw new Error('Product ID is required');
   return qc.query({
     ...productRequiredDetailQO({ productId }),
     staleTime: 'static',
