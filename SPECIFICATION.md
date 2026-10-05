@@ -19,7 +19,7 @@ Kit не определяет HTTP-клиент, формат API, runtime-ва�
 | `<domain>.qk.ts` | Один namespace-объект `<domain>QK` | Ключи ресурса и их префиксы |
 | `<domain>.qo.ts` | Отдельные `<domain><operation>QO` | `queryOptions` / `infiniteQueryOptions` |
 | `<domain>.mo.ts` | Отдельные `<domain><operation>MO` | `mutationOptions` и полный cache-effect |
-| `<scenario>.aggregation.ts` | Namespace-объект `<scenario>Aggregation` | Ссылки на QO и чистая композиция |
+| `<scenario>.aggregation.ts` | Namespace-объект `<scenario>Aggregation` | Ссылки на QO/MO и чистая композиция |
 
 Namespace здесь означает обычный `const`-объект, а не TypeScript `namespace`. `.qk`, `.qo`, `.mo`, `.aggregation` — виды файлов; `QK`, `QO`, `MO`, `Aggregation` — суффиксы экспортов.
 
@@ -28,13 +28,13 @@ Namespace здесь означает обычный `const`-объект, а н
 | `.qk` | Нет |
 | `.qo` | `.qk` |
 | `.mo` | `.qk`, включая ключи других затронутых ресурсов |
-| `.aggregation` | `.qo` |
+| `.aggregation` | `.qo`, `.mo` |
 | Consumer | `.qo`, `.mo`, `.aggregation` |
 | Transport adapter | Нет |
 
 Таблица ограничивает зависимости между модулями Kit. Импорты типов, transport-функций в `.qo`/`.mo` и чистых доменных функций в `.aggregation` допустимы. Публичные barrel-экспорты не должны позволять consumer обходить границу `.qk`.
 
-Consumer — компонент, router loader, preloader или другой adapter жизненного цикла приложения. Агрегация необязательна: consumer может использовать QO напрямую.
+Consumer — компонент, router loader, preloader или другой adapter жизненного цикла приложения. Агрегация необязательна: consumer может использовать QO и MO напрямую.
 
 ```mermaid
 flowchart TD
@@ -42,6 +42,7 @@ flowchart TD
   Consumer --> MO[.mo]
   Consumer --> Aggregation[.aggregation]
   Aggregation --> QO
+  Aggregation --> MO
   QO --> QK[.qk]
   MO --> QK
   QO --> Transport[Transport adapter]
@@ -175,23 +176,26 @@ UI-effects передаются в callbacks конкретного `mutate(vari
 
 ## 6. Aggregation: `.aggregation.ts`
 
-`<scenario>Aggregation` — namespace-объект со ссылками на QO и чистыми функциями. Он нужен только для переиспользуемой композиции нескольких ресурсов.
+`<scenario>Aggregation` — namespace-объект со ссылками на QO/MO и чистыми функциями. Он объединяет запросы, мутации и доменные функции конкретного сценария. Сочетание операций, мапперы и бизнес-guards могут иметь смысл только в этом сценарии; повторное использование в других сценариях не обязательно. Ресурсные QO/MO остаются самостоятельными, а специфичные для сценария мапперы, бизнес-guards и набор операций находятся в `.aggregation`.
 
-Допустимы ссылки на QO, mappers, normalizers, selectors, resolvers, бизнес-guards и инварианты. Если адаптация не нужна, фабрика передаётся по ссылке:
+Например, сценарий может требовать последовательность «получить данные → преобразовать результат маппером → передать его в мутацию». Агрегация объединяет нужные QO/MO, мапперы результата и variables, а consumer сам определяет последовательность и исполняет шаги, передавая результат предыдущего шага следующему. Агрегация не задаёт порядок операций; разные consumers могут использовать её операции и функции в разных последовательностях. Такие мапперы могут оставаться локальными для `.aggregation`, если вне сценария они не нужны.
+
+Допустимы ссылки на QO и MO, mappers, normalizers, selectors, resolvers, бизнес-guards и инварианты. Если адаптация не нужна, фабрика передаётся по ссылке:
 
 ```ts
 export const productPageAggregation = {
   productQO: productDetailQO,
   categoryQO: categoryDetailQO,
+  renameProductMO: productRenameMO,
   shouldQueryCategory: (product: Product | undefined) =>
     product?.status === 'published' && product.categoryId !== undefined,
   toView: toProductPageView,
 } as const;
 ```
 
-Запрещены hooks, transport-вызовы, новый `queryFn`, `QueryClient`, side effects, `enabled`, владение ключами и повторение технических `skipToken`-guards. Pass-through wrapper вокруг неизменённой QO не нужен.
+Запрещены hooks, transport-вызовы, новые `queryFn` и `mutationFn`, `QueryClient`, side effects, `enabled`, владение ключами и повторение технических `skipToken`-guards. Pass-through wrapper вокруг неизменённой QO или MO не нужен. Ссылка на MO сохраняет её callbacks и полный cache-effect; агрегация не дополняет и не переопределяет этот эффект.
 
-Технический guard находится в `.qo`; бизнес-guard — в `.aggregation`; применение через `enabled` — в consumer. Aggregation не исполняет запросы и не определяет framework lifecycle. Хуки, которые инкапсулируют такую агрегацию, запрещены: переиспользуется сам объект `Aggregation`.
+Технический guard находится в `.qo`; бизнес-guard — в `.aggregation`; применение через `enabled` — в consumer. Aggregation не исполняет запросы или мутации и не определяет framework lifecycle. Хуки, которые инкапсулируют такую агрегацию, запрещены: переиспользуется сам объект `Aggregation`.
 
 ## 7. Consumer и lifecycle
 
