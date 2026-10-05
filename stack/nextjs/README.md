@@ -4,6 +4,8 @@
 
 ## Server и Client Components
 
+[Общие SSR-принципы](../../SPECIFICATION.md#общие-принципы-ssr) задают требования к изоляции и переносу состояния; ниже — границы App Router.
+
 Server Component может подготовить Query cache; Client Component наблюдает ресурс через QO. Provider, request-scoped QueryClient, dehydration и `HydrationBoundary` размещаются в framework adapter. Server-only зависимости не должны попадать в клиентский transport. Конкретные варианты показаны в [Advanced SSR](https://tanstack.com/query/latest/docs/framework/react/guides/advanced-ssr).
 
 Next.js cache и Query cache имеют разные механизмы обновления. При сочетании серверного и клиентского чтения явно определите, какой слой владеет каждым отображаемым ресурсом и как изменения доходят до обоих lifecycle. Kit не вводит автоматическую синхронизацию кешей.

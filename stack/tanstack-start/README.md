@@ -10,6 +10,8 @@ Framework adapter различает ошибки операции и сигна
 
 ## Клиент, SSR и streaming
 
+Обоснование изоляции и переноса состояния находится в [общих SSR-принципах](../../SPECIFICATION.md#общие-принципы-ssr). Здесь описаны точки подключения Start.
+
 Клиент создаётся внутри `getRouter`: Start создаёт router на SSR request, браузер сохраняет его при навигации. Интеграция `@tanstack/react-router-ssr-query` отвечает за provider и перенос кеша. Критичные для страницы queries ожидаются в loader; второстепенные могут streaming-рендериться с собственной UI-границей. Их императивные Promise также обрабатывают rejection. [Setup и streaming](https://tanstack.com/start/latest/docs/framework/react/guide/tanstack-query).
 
 Документация framework может показывать invalidation в компоненте; при внедрении Kit этот cache-effect размещается в MO по [общей спецификации](../../SPECIFICATION.md#5-mutation-options-mots). Проверьте изоляцию requests, hydration и успешную запись без дублирования cache-effect.

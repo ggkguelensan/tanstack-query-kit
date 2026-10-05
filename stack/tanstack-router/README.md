@@ -10,6 +10,8 @@ Loader получает QueryClient из router context и передаёт ре
 
 ## Если используется SSR
 
+Применяются [общие SSR-принципы](../../SPECIFICATION.md#общие-принципы-ssr); ниже — API интеграции Router.
+
 `@tanstack/react-router-ssr-query` — отдельная интеграция для dehydration/hydration и streaming. Её provider использует тот же клиент, что loaders; существующий provider согласуется через настройки интеграции. Создание клиента и сериализация принадлежат adapter. [Query integration](https://tanstack.com/router/latest/docs/integrations/query).
 
 [Материалы по стеку](../README.md).
