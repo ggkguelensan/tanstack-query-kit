@@ -101,18 +101,30 @@ export const categoryQK = {
 ```ts
 import { infiniteQueryOptions, queryOptions, skipToken } from '@tanstack/react-query';
 import { getProduct, getProductPage, getProducts } from './catalog.transport';
-import type { ProductListParams } from './catalog.types';
+import type { Product, ProductListParams } from './catalog.types';
 import { productQK } from './product.qk';
 
-export const productDetailQO = ({ productId }: { productId: string | undefined }) =>
-  queryOptions({
-    queryKey: !productId ? productQK.unavailableDetail() : productQK.detail({ productId }),
-    queryFn: !productId
-      ? skipToken
-      : ({ signal }) => getProduct(productId, { signal }),
+type ProductDetailKey =
+  | ReturnType<typeof productQK.detail>
+  | ReturnType<typeof productQK.unavailableDetail>;
+
+export const productDetailQO = ({ productId }: { productId: string | undefined }) => {
+  if (!productId) {
+    return queryOptions<Product, Error, Product, ProductDetailKey>({
+      queryKey: productQK.unavailableDetail(),
+      queryFn: skipToken,
+      staleTime: 30_000,
+      gcTime: 300_000,
+    });
+  }
+
+  return queryOptions<Product, Error, Product, ProductDetailKey>({
+    queryKey: productQK.detail({ productId }),
+    queryFn: ({ signal }) => getProduct(productId, { signal }),
     staleTime: 30_000,
     gcTime: 300_000,
   });
+};
 
 export const productListQO = (params: ProductListParams) =>
   queryOptions({
@@ -139,17 +151,30 @@ export const productInfiniteQO = (params: ProductListParams) =>
 ```ts
 import { queryOptions, skipToken } from '@tanstack/react-query';
 import { getCategory } from './catalog.transport';
+import type { Category } from './catalog.types';
 import { categoryQK } from './category.qk';
 
-export const categoryDetailQO = ({ categoryId }: { categoryId: string | undefined }) =>
-  queryOptions({
-    queryKey: !categoryId ? categoryQK.unavailableDetail() : categoryQK.detail({ categoryId }),
-    queryFn: !categoryId
-      ? skipToken
-      : ({ signal }) => getCategory(categoryId, { signal }),
+type CategoryDetailKey =
+  | ReturnType<typeof categoryQK.detail>
+  | ReturnType<typeof categoryQK.unavailableDetail>;
+
+export const categoryDetailQO = ({ categoryId }: { categoryId: string | undefined }) => {
+  if (!categoryId) {
+    return queryOptions<Category, Error, Category, CategoryDetailKey>({
+      queryKey: categoryQK.unavailableDetail(),
+      queryFn: skipToken,
+      staleTime: 60_000,
+      gcTime: 300_000,
+    });
+  }
+
+  return queryOptions<Category, Error, Category, CategoryDetailKey>({
+    queryKey: categoryQK.detail({ categoryId }),
+    queryFn: ({ signal }) => getCategory(categoryId, { signal }),
     staleTime: 60_000,
     gcTime: 300_000,
   });
+};
 ```
 
 Значения времени иллюстративны. В реальном приложении они выбираются по допустимому возрасту данных.

@@ -113,7 +113,7 @@ Consumer передаёт options целиком: `useQuery(productDetailQO({ pr
 Обязательные правила:
 
 1. `queryFn` вызывает transport adapter и передаёт ему `signal`.
-2. Готовность обязательных параметров проверяется до вызова конкретного ключа `.qk`. Если параметр отсутствует или невалиден, `.qo` использует отдельный технический ключ `unavailable<Operation>()` и `skipToken`, не создавая ключ конкретного ресурса.
+2. Готовность обязательных параметров проверяется до вызова конкретного ключа `.qk`. Если параметр отсутствует или невалиден, `.qo` использует отдельный технический ключ `unavailable<Operation>()` и `skipToken`, не создавая ключ конкретного ресурса. Эта ветка обязательно оформляется как early return; ниже возвращаются options готового запроса. Тернарные проверки готовности внутри `queryKey` и `queryFn` не используются.
 3. `enabled` принадлежит consumer и запрещён в `.qo`.
 4. Фабрика не принимает произвольные TanStack overrides. Consumer добавляет настройки наблюдателя через spread.
 5. Consumer не подменяет `queryKey`, `queryFn` и контракт пагинации. Изменение идентичности или способа загрузки требует отдельной QO.
@@ -121,14 +121,26 @@ Consumer передаёт options целиком: `useQuery(productDetailQO({ pr
 7. `staleTime` и `gcTime` выбираются по свойствам ресурса. Их нельзя увеличивать только для сокрытия случайных повторных запросов.
 
 ```ts
-export const productDetailQO = ({ productId }: { productId: string | undefined }) =>
-  queryOptions({
-    queryKey: !productId ? productQK.unavailableDetail() : productQK.detail({ productId }),
-    queryFn: !productId
-      ? skipToken
-      : ({ signal }) => getProduct(productId, { signal }),
+type ProductDetailKey =
+  | ReturnType<typeof productQK.detail>
+  | ReturnType<typeof productQK.unavailableDetail>;
+
+export const productDetailQO = ({ productId }: { productId: string | undefined }) => {
+  if (!productId) {
+    return queryOptions<Product, Error, Product, ProductDetailKey>({
+      queryKey: productQK.unavailableDetail(),
+      queryFn: skipToken,
+    });
+  }
+
+  return queryOptions<Product, Error, Product, ProductDetailKey>({
+    queryKey: productQK.detail({ productId }),
+    queryFn: ({ signal }) => getProduct(productId, { signal }),
   });
+};
 ```
+
+Обе ветки `queryOptions` имеют один тип данных ресурса и общий тип ключа — объединение конкретного и технического ключей. Явные generic-параметры в примере сохраняют совместимость результата фабрики с `useQuery`, `useQueries` и императивными consumer-вызовами; runtime-обёртка для этого не нужна.
 
 При отсутствии ID `.qo` использует `unavailableDetail()` только как ключ заблокированного наблюдателя с `skipToken`. Он обозначает техническое состояние операции, а не категорию, товар или коллекцию. Под этим ключом не загружают и не записывают данные ресурса. После появления валидного ID `.qo` создаёт конкретный detail-ключ.
 

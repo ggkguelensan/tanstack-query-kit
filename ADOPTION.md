@@ -22,7 +22,7 @@
 | --- | --- |
 | Зависимости | Consumer не импортирует QK, transport не зависит от Kit |
 | Ключи | Все влияющие параметры учтены, readonly tuples, именованные объекты параметров, готовые обязательные ID, разные ветки для finite/infinite |
-| QO | Отдельные экспорты, signal передан, технические guards до конкретного QK, отдельный unavailable-ключ + skipToken при отсутствии ID, нет enabled и overrides-аргумента |
+| QO | Отдельные экспорты, signal передан, early return с unavailable-ключом и skipToken до конкретного QK, без тернарных guards, нет enabled и overrides-аргумента |
 | Параметры | QK/QO/MO принимают один именованный объект или не имеют параметров; variables mutationFn — объект |
 | Типы | Inference сохраняется через options и select; нет `any` или casts, скрывающих ошибку контракта |
 | MO | Все cache-effects внутри MO, callbacks не перезаписаны consumer, Promise ожидается |
