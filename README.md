@@ -17,7 +17,7 @@
 | `product.qk.ts` | `productQK` | Иерархию ключей кэша |
 | `product.qo.ts` | `productDetailQO`, `productListQO` | Контракт чтения ресурса |
 | `product.mo.ts` | `productRenameMO` | Запись и весь эффект операции на кэш |
-| `product-page.aggregation.ts` | `productPageAggregation` | Чистую переиспользуемую композицию |
+| `product-page.aggregation.ts` | `productPageAggregation` | Композицию QO/MO и доменных функций сценария |
 
 Consumer передаёт options целиком:
 
