@@ -130,7 +130,7 @@ Consumer показывает pending и ошибку; MO сохраняет с�
 
 ## Стадии отказа записи
 
-Этот дополнительный пример демонстрирует политику отказа обязательного refetch. Он не задаёт универсальный формат ошибок. Transport нормализует известные ответы в `CatalogOperationError`: `kind` описывает происхождение, `outcome` — подтверждённость результата команды. Статус HTTP не заменяет контракт сервиса; неизвестная ошибка остаётся `unknown` и требует диагностики.
+Этот дополнительный пример демонстрирует политику отказа обязательного refetch. Он не задаёт универсальный формат ошибок. Transport нормализует известные ответы в `CatalogOperationError`: `kind` описывает происхождение, `operation` различает чтение и команду, `outcome` — подтверждённость результата команды. Статус HTTP не заменяет контракт сервиса; неизвестная ошибка остаётся `unknown` и требует диагностики.
 
 `catalog-error.ts`
 
@@ -139,16 +139,17 @@ import type { Product } from './catalog.types';
 
 export class CatalogOperationError extends Error {
   readonly kind: 'transport' | 'service' | 'business';
-  readonly outcome: 'rejected' | 'unknown';
+  readonly operation: 'read' | 'command';
+  readonly outcome: 'rejected' | 'unknown' | undefined;
 
-  constructor({ kind, outcome, cause }: {
+  constructor(params: {
     kind: 'transport' | 'service' | 'business';
-    outcome: 'rejected' | 'unknown';
     cause?: unknown;
-  }) {
-    super('Catalog operation failed', { cause });
-    this.kind = kind;
-    this.outcome = outcome;
+  } & ({ operation: 'read' } | { operation: 'command'; outcome: 'rejected' | 'unknown' })) {
+    super('Catalog operation failed', { cause: params.cause });
+    this.kind = params.kind;
+    this.operation = params.operation;
+    this.outcome = params.operation === 'command' ? params.outcome : undefined;
   }
 }
 
@@ -166,6 +167,12 @@ export const getErrorPresentation = ({ error }: { error: unknown }) => {
     return { message: 'Товар сохранён, но связанные данные не обновились', recovery: 'retry-read' } as const;
   }
   if (error instanceof CatalogOperationError) {
+    if (error.operation === 'read') {
+      if (error.kind === 'business') {
+        return { message: 'Данные недоступны по правилам сервиса', recovery: 'resolve-domain-state' } as const;
+      }
+      return { message: 'Не удалось получить данные', recovery: 'retry-read' } as const;
+    }
     if (error.outcome === 'unknown') {
       return { message: 'Результат записи неизвестен. Проверьте состояние товара', recovery: 'check-write' } as const;
     }
@@ -208,4 +215,4 @@ export const productRenameWithRequiredRefreshMO = () =>
 
 Если MO добавляет optimistic update, её `onError` не откатывает подтверждённую запись при `CacheReconciliationError`. Для `outcome: 'unknown'` применяется политика проверки результата из [спецификации](../../SPECIFICATION.md#повторы-и-результат-записи), а не вывод об отказе по timeout. Consumer показывает подтверждённость записи и восстанавливает чтение через QO; `mutation.reset()` только закрывает состояние ошибки. Команда не отправляется повторно ради восстановления кэша. Неизвестная ошибка программы передаётся мониторингу и выбранной UI-границе.
 
-Контракт приведён для записи; read-errors не получают `outcome` команды. Приложение отдельно определяет допустимые повторы чтения по нормализованным transport/service ошибкам. Регистрация `defaultError: unknown` сохраняет необходимость runtime-narrowing для обоих видов операций.
+Read-errors не получают `outcome` команды. `retry-read` обозначает восстановление чтения, а не безусловный автоматический retry; допустимые повторы определяет ресурсная политика по нормализованным transport/service ошибкам. Регистрация `defaultError: unknown` сохраняет необходимость runtime-narrowing для обоих видов операций.

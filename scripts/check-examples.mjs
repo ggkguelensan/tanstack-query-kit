@@ -142,12 +142,19 @@ const client = createQueryClient();
   assert.equal(client.getQueryData(productQK.detail({ productId: 'p1' })).name, 'Saved');
   stopFailing();
 
-  const business = new CatalogOperationError({ kind: 'business', outcome: 'rejected' });
+  const business = new CatalogOperationError({ kind: 'business', operation: 'command', outcome: 'rejected' });
   assert.equal(getErrorPresentation({ error: business }).recovery, 'revise-command');
-  const unknown = new CatalogOperationError({ kind: 'transport', outcome: 'unknown' });
+  const unknown = new CatalogOperationError({ kind: 'transport', operation: 'command', outcome: 'unknown' });
   assert.equal(getErrorPresentation({ error: unknown }).recovery, 'check-write');
-  const service = new CatalogOperationError({ kind: 'service', outcome: 'rejected' });
+  const service = new CatalogOperationError({ kind: 'service', operation: 'command', outcome: 'rejected' });
   assert.equal(getErrorPresentation({ error: service }).recovery, 'command-policy');
+  for (const kind of ['transport', 'service']) {
+    const readError = new CatalogOperationError({ kind, operation: 'read' });
+    assert.equal(readError.outcome, undefined);
+    assert.equal(getErrorPresentation({ error: readError }).recovery, 'retry-read');
+  }
+  const domainRead = new CatalogOperationError({ kind: 'business', operation: 'read' });
+  assert.equal(getErrorPresentation({ error: domainRead }).recovery, 'resolve-domain-state');
   assert.equal(getErrorPresentation({ error: new Error('internal details') }).recovery, 'report');
 
   client.setQueryData(categoryQK.detail({ categoryId: 'c1' }), { id: 'c1', name: 'Cached category' });
