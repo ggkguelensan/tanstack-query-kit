@@ -103,13 +103,13 @@ import type { ProductListParams } from './catalog.types';
 import { productQK } from './product.qk';
 
 export const productDetailQO = ({ productId }: { productId: string | undefined }) => {
-  const isReady = productId !== undefined && productId !== '';
+  const isMissing = !productId;
 
   return queryOptions({
-    queryKey: isReady ? productQK.detail({ productId }) : productQK.details(),
-    queryFn: isReady
-      ? ({ signal }) => getProduct(productId, { signal })
-      : skipToken,
+    queryKey: isMissing ? productQK.details() : productQK.detail({ productId }),
+    queryFn: isMissing
+      ? skipToken
+      : ({ signal }) => getProduct(productId, { signal }),
     staleTime: 30_000,
     gcTime: 300_000,
   });
@@ -143,13 +143,13 @@ import { getCategory } from './catalog.transport';
 import { categoryQK } from './category.qk';
 
 export const categoryDetailQO = ({ categoryId }: { categoryId: string | undefined }) => {
-  const isReady = categoryId !== undefined && categoryId !== '';
+  const isMissing = !categoryId;
 
   return queryOptions({
-    queryKey: isReady ? categoryQK.detail({ categoryId }) : categoryQK.details(),
-    queryFn: isReady
-      ? ({ signal }) => getCategory(categoryId, { signal })
-      : skipToken,
+    queryKey: isMissing ? categoryQK.details() : categoryQK.detail({ categoryId }),
+    queryFn: isMissing
+      ? skipToken
+      : ({ signal }) => getCategory(categoryId, { signal }),
     staleTime: 60_000,
     gcTime: 300_000,
   });
@@ -286,7 +286,7 @@ export const ProductPanel = ({ productId, isPanelOpen, onRenamed }: ProductPanel
   const rename = useMutation(productPageAggregation.renameProductMO());
 
   if (!isPanelOpen) return null;
-  if (productId === undefined || productId === '') return <p>Выберите товар</p>;
+  if (!productId) return <p>Выберите товар</p>;
   if (productQuery.isError) return <p>Не удалось загрузить товар</p>;
   if (!productQuery.data) return <p>Загрузка…</p>;
 
@@ -325,7 +325,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { productDetailQO } from './product.qo';
 
 export const loadProduct = async (client: QueryClient, productId: string) => {
-  if (productId === '') throw new Error('Product ID is required');
+  if (!productId) throw new Error('Product ID is required');
   return client.ensureQueryData(productDetailQO({ productId }));
 };
 ```

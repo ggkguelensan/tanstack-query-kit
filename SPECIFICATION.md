@@ -119,13 +119,13 @@ Consumer передаёт options целиком: `useQuery(productDetailQO({ pr
 
 ```ts
 export const productDetailQO = ({ productId }: { productId: string | undefined }) => {
-  const isReady = productId !== undefined && productId !== '';
+  const isMissing = !productId;
 
   return queryOptions({
-    queryKey: isReady ? productQK.detail({ productId }) : productQK.details(),
-    queryFn: isReady
-      ? ({ signal }) => getProduct(productId, { signal })
-      : skipToken,
+    queryKey: isMissing ? productQK.details() : productQK.detail({ productId }),
+    queryFn: isMissing
+      ? skipToken
+      : ({ signal }) => getProduct(productId, { signal }),
   });
 };
 ```
