@@ -108,7 +108,7 @@ Consumer передаёт options целиком в API выбранного а�
 
 Каждая фабрика экспортируется отдельно: `productDetailQO`, `productListQO`. Объект `productQO = { detail, list }` запрещён: отдельные экспорты не связывают операции заранее в один namespace.
 
-Фабрика принимает параметры ресурса и возвращает результат стандартного `queryOptions` или `infiniteQueryOptions`. Собственная runtime-обёртка над ними не требуется. Это сохраняет [вывод типов options](https://tanstack.com/query/latest/docs/framework/react/guides/query-options).
+Фабрика принимает параметры ресурса и возвращает результат стандартного `queryOptions` или `infiniteQueryOptions`. Типы данных и ключа выводятся из переданных значений и результата `queryFn`; фабрика не дублирует их явными generic-аргументами. Собственная runtime-обёртка над ними не требуется. Это сохраняет [вывод типов options](https://tanstack.com/query/latest/docs/framework/react/guides/query-options).
 
 Обязательные правила:
 

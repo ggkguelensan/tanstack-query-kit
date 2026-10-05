@@ -101,33 +101,33 @@ export const categoryQK = {
 `product.qo.ts`
 
 ```ts
-import type { DefaultError } from '@tanstack/react-query';
+import type { QueryFunctionContext } from '@tanstack/react-query';
 import { infiniteQueryOptions, queryOptions, skipToken } from '@tanstack/react-query';
 import { getProduct, getProductPage, getProducts } from './catalog.transport';
-import type { Product, ProductListParams } from './catalog.types';
+import type { ProductListParams } from './catalog.types';
 import { productQK } from './product.qk';
 
 const productDetailCachePolicy = { staleTime: 30_000, gcTime: 300_000 } as const;
 
-type ProductDetailKey =
-  | ReturnType<typeof productQK.detail>
-  | ReturnType<typeof productQK.unavailableDetail>;
-
-export const productDetailQO = ({ productId }: { productId: string | undefined }) => {
+const resolveProductDetailOptions = ({ productId }: { productId: string | undefined }) => {
   if (!productId) {
-    return queryOptions<Product, DefaultError, Product, ProductDetailKey>({
+    return {
       queryKey: productQK.unavailableDetail(),
       queryFn: skipToken,
-      ...productDetailCachePolicy,
-    });
+    } as const;
   }
 
-  return queryOptions<Product, DefaultError, Product, ProductDetailKey>({
+  return {
     queryKey: productQK.detail({ productId }),
-    queryFn: ({ signal }) => getProduct(productId, { signal }),
+    queryFn: ({ signal }: QueryFunctionContext) => getProduct(productId, { signal }),
+  };
+};
+
+export const productDetailQO = (params: { productId: string | undefined }) =>
+  queryOptions({
+    ...resolveProductDetailOptions(params),
     ...productDetailCachePolicy,
   });
-};
 
 // Для consumers, которым обязательные параметры уже доступны.
 export const productRequiredDetailQO = ({ productId }: { productId: string }) => {
@@ -163,34 +163,34 @@ export const productInfiniteQO = (params: ProductListParams) =>
 `category.qo.ts`
 
 ```ts
-import type { DefaultError } from '@tanstack/react-query';
+import type { QueryFunctionContext } from '@tanstack/react-query';
 import { queryOptions, skipToken } from '@tanstack/react-query';
 import { getCategory } from './catalog.transport';
-import type { Category } from './catalog.types';
 import { categoryQK } from './category.qk';
 
-type CategoryDetailKey =
-  | ReturnType<typeof categoryQK.detail>
-  | ReturnType<typeof categoryQK.unavailableDetail>;
-
-export const categoryDetailQO = ({ categoryId }: { categoryId: string | undefined }) => {
+const resolveCategoryDetailOptions = ({ categoryId }: { categoryId: string | undefined }) => {
   if (!categoryId) {
-    return queryOptions<Category, DefaultError, Category, CategoryDetailKey>({
+    return {
       queryKey: categoryQK.unavailableDetail(),
       queryFn: skipToken,
-      staleTime: 60_000,
-      gcTime: 300_000,
-    });
+    } as const;
   }
 
-  return queryOptions<Category, DefaultError, Category, CategoryDetailKey>({
+  return {
     queryKey: categoryQK.detail({ categoryId }),
-    queryFn: ({ signal }) => getCategory(categoryId, { signal }),
+    queryFn: ({ signal }: QueryFunctionContext) => getCategory(categoryId, { signal }),
+  };
+};
+
+export const categoryDetailQO = (params: { categoryId: string | undefined }) =>
+  queryOptions({
+    ...resolveCategoryDetailOptions(params),
     staleTime: 60_000,
     gcTime: 300_000,
   });
-};
 ```
+
+Resolver остаётся приватной частью `.qo`: early return выбирает технический ключ до вызова конкретного QK. `queryOptions` вызывается один раз после выбора ветки и выводит тип данных из исполняемого `queryFn`; `as const` сохраняет `skipToken` как unique symbol. Типы ответа и ключа не передаются в generics.
 
 `productRequiredDetailQO` сохраняет тот же detail-ключ и форму данных, но не допускает `skipToken`. Она подходит для Suspense и для императивного consumer с готовым ID. Пустая строка нарушает её контракт; обычная `productDetailQO` выражает неготовность через технический ключ и early return.
 

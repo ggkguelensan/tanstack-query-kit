@@ -10,7 +10,7 @@
 
 ## Типизация ошибок
 
-Контракт приложения из [спецификации](../../SPECIFICATION.md#8-ошибки-и-восстановление) регистрируется через `Register.defaultError`; при необходимости обязательного narrowing используется `unknown`. Явные generic-параметры QO/MO используют `DefaultError`, а не фиксированный `Error`. Регистрация влияет на типы и не преобразует ошибки в runtime. См. [TypeScript](https://tanstack.com/query/latest/docs/framework/react/typescript#registering-a-global-error).
+Контракт приложения из [спецификации](../../SPECIFICATION.md#8-ошибки-и-восстановление) регистрируется через `Register.defaultError`; при необходимости обязательного narrowing используется `unknown`. QO/MO выводят типы из переданных options; тип ошибки учитывает регистрацию приложения без явных generic-аргументов. Регистрация влияет на типы и не преобразует ошибки в runtime. См. [TypeScript](https://tanstack.com/query/latest/docs/framework/react/typescript#registering-a-global-error).
 
 ## Инфраструктура и типы meta
 

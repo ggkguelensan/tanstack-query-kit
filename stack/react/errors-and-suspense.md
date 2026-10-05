@@ -18,7 +18,7 @@ declare module '@tanstack/react-query' {
 }
 ```
 
-Файл включается в TypeScript-программу. В существующем приложении используется его регистрация, а не вторая конкурирующая. `unknown` требует проверки перед чтением полей ошибки; `DefaultError` в фабриках сохраняет этот выбор. Это не runtime-валидация: transport отвечает за фактически выброшенное значение. См. [TanStack Query — типы ошибок](https://tanstack.com/query/latest/docs/framework/react/typescript#registering-a-global-error).
+Файл включается в TypeScript-программу. В существующем приложении используется его регистрация, а не вторая конкурирующая. `unknown` требует проверки перед чтением полей ошибки; Вывод типов фабрик сохраняет этот выбор. Это не runtime-валидация: transport отвечает за фактически выброшенное значение. См. [TanStack Query — типы ошибок](https://tanstack.com/query/latest/docs/framework/react/typescript#registering-a-global-error).
 
 `ui-error.ts`
 
