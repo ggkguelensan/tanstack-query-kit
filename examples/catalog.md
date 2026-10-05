@@ -74,6 +74,7 @@ export const productQK = {
   infinite: (params: ProductListParams) =>
     [...productQK.lists(), 'infinite', params] as const,
   details: () => [...productQK.all(), 'detail'] as const,
+  unavailableDetail: () => [...productQK.all(), 'unavailable', 'detail'] as const,
   detail: (params: { productId: string }) =>
     [...productQK.details(), params] as const,
 } as const;
@@ -85,6 +86,7 @@ export const productQK = {
 export const categoryQK = {
   all: () => ['category'] as const,
   details: () => [...categoryQK.all(), 'detail'] as const,
+  unavailableDetail: () => [...categoryQK.all(), 'unavailable', 'detail'] as const,
   detail: (params: { categoryId: string }) =>
     [...categoryQK.details(), params] as const,
 } as const;
@@ -104,7 +106,7 @@ import { productQK } from './product.qk';
 
 export const productDetailQO = ({ productId }: { productId: string | undefined }) =>
   queryOptions({
-    queryKey: !productId ? productQK.details() : productQK.detail({ productId }),
+    queryKey: !productId ? productQK.unavailableDetail() : productQK.detail({ productId }),
     queryFn: !productId
       ? skipToken
       : ({ signal }) => getProduct(productId, { signal }),
@@ -141,7 +143,7 @@ import { categoryQK } from './category.qk';
 
 export const categoryDetailQO = ({ categoryId }: { categoryId: string | undefined }) =>
   queryOptions({
-    queryKey: !categoryId ? categoryQK.details() : categoryQK.detail({ categoryId }),
+    queryKey: !categoryId ? categoryQK.unavailableDetail() : categoryQK.detail({ categoryId }),
     queryFn: !categoryId
       ? skipToken
       : ({ signal }) => getCategory(categoryId, { signal }),
