@@ -24,7 +24,7 @@
 | Ключи | Все влияющие параметры учтены, readonly tuples, именованные объекты параметров, готовые обязательные ID, разные ветки для finite/infinite |
 | QO | Отдельные экспорты, signal передан, optional-QO блокирует неготовые параметры; ready-QO получает подготовленный ввод; обе совместимы с выбранными consumers |
 | Параметры | QK/QO/MO принимают один именованный объект или не имеют параметров; variables mutationFn — объект |
-| Типы | Нет аннотаций возвращаемого типа QO/MO и generic-аргументов options helpers; inference сохраняется из transport и select, нет `any` или скрывающих ошибку casts |
+| Типы | Максимально используется inference; явные типы обоснованы контрактом или недостающим контекстом. Нет аннотаций возвращаемого типа QO/MO и generic-аргументов options helpers; inference сохраняется из transport и select, нет `any` или скрывающих ошибку casts |
 | MO | Все cache-effects внутри MO, callbacks не перезаписаны consumer, Promise ожидается |
 | Meta | Тип зарегистрирован и executor действительно установлен на используемом клиенте |
 | Aggregation | Только ссылки на QO/MO и чистые функции; нет hooks, keys и side effects |
