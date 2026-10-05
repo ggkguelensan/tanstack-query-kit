@@ -118,16 +118,13 @@ Consumer передаёт options целиком: `useQuery(productDetailQO({ pr
 7. `staleTime` и `gcTime` выбираются по свойствам ресурса. Их нельзя увеличивать только для сокрытия случайных повторных запросов.
 
 ```ts
-export const productDetailQO = ({ productId }: { productId: string | undefined }) => {
-  const isMissing = !productId;
-
-  return queryOptions({
-    queryKey: isMissing ? productQK.details() : productQK.detail({ productId }),
-    queryFn: isMissing
+export const productDetailQO = ({ productId }: { productId: string | undefined }) =>
+  queryOptions({
+    queryKey: !productId ? productQK.details() : productQK.detail({ productId }),
+    queryFn: !productId
       ? skipToken
       : ({ signal }) => getProduct(productId, { signal }),
   });
-};
 ```
 
 При отсутствии ID `details()` используется только как ключ заблокированного наблюдателя. Под этим префиксом не загружают и не записывают данные ресурса; сам префикс также остаётся фильтром для cache-effect. После появления валидного ID `.qo` создаёт конкретный detail-ключ.
@@ -209,7 +206,7 @@ export const productPageAggregation = {
   categoryQO: categoryDetailQO,
   renameProductMO: productRenameMO,
   shouldQueryCategory: (product: Product | undefined) =>
-    product?.status === 'published' && product.categoryId !== undefined,
+    product?.status === 'published',
   toView: toProductPageView,
 } as const;
 ```

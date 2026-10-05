@@ -102,18 +102,15 @@ import { getProduct, getProductPage, getProducts } from './catalog.transport';
 import type { ProductListParams } from './catalog.types';
 import { productQK } from './product.qk';
 
-export const productDetailQO = ({ productId }: { productId: string | undefined }) => {
-  const isMissing = !productId;
-
-  return queryOptions({
-    queryKey: isMissing ? productQK.details() : productQK.detail({ productId }),
-    queryFn: isMissing
+export const productDetailQO = ({ productId }: { productId: string | undefined }) =>
+  queryOptions({
+    queryKey: !productId ? productQK.details() : productQK.detail({ productId }),
+    queryFn: !productId
       ? skipToken
       : ({ signal }) => getProduct(productId, { signal }),
     staleTime: 30_000,
     gcTime: 300_000,
   });
-};
 
 export const productListQO = (params: ProductListParams) =>
   queryOptions({
@@ -142,18 +139,15 @@ import { queryOptions, skipToken } from '@tanstack/react-query';
 import { getCategory } from './catalog.transport';
 import { categoryQK } from './category.qk';
 
-export const categoryDetailQO = ({ categoryId }: { categoryId: string | undefined }) => {
-  const isMissing = !categoryId;
-
-  return queryOptions({
-    queryKey: isMissing ? categoryQK.details() : categoryQK.detail({ categoryId }),
-    queryFn: isMissing
+export const categoryDetailQO = ({ categoryId }: { categoryId: string | undefined }) =>
+  queryOptions({
+    queryKey: !categoryId ? categoryQK.details() : categoryQK.detail({ categoryId }),
+    queryFn: !categoryId
       ? skipToken
       : ({ signal }) => getCategory(categoryId, { signal }),
     staleTime: 60_000,
     gcTime: 300_000,
   });
-};
 ```
 
 Значения времени иллюстративны. В реальном приложении они выбираются по допустимому возрасту данных.
@@ -252,7 +246,7 @@ export const productPageAggregation = {
   categoryQO: categoryDetailQO,
   renameProductMO: productRenameMO,
   shouldQueryCategory: (product: Product | undefined) =>
-    product?.status === 'published' && product.categoryId !== undefined,
+    product?.status === 'published',
   toView: toProductPageView,
 } as const;
 ```
