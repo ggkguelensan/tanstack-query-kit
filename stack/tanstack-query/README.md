@@ -1,6 +1,6 @@
 # TanStack Query: API и типизация
 
-Область применения: TanStack Query v5 и выбранный framework adapter. Это детали API поверх [общей спецификации](../../SPECIFICATION.md), без требования React или роутера. Проверенная версия сквозного React-примера — `@tanstack/react-query@5.104.1`; совместимость других адаптеров проверяется отдельно.
+Область применения: TanStack Query v5 и выбранный framework adapter. Это детали API поверх [общей спецификации](../../SPECIFICATION.md), без требования React или роутера. Проверенные версии и примеры указаны в [материалах адаптеров](../README.md).
 
 ## Императивное выполнение
 
@@ -13,7 +13,7 @@ Consumer выбирает API по форме QO. При наличии новы
 
 Чтение с `staleTime: 'static'` заменяет соответствующий ensure-метод без `revalidateIfStale`; это выбор consumer, а не общий cache-policy ресурса. Для версий без новых методов используются соответствующие API предыдущих версий с их семантикой. Версия API выбирается при внедрении; runtime-проверка наличия метода в каждом consumer не требуется.
 
-Infinite QO не передаётся в `qc.query`: обычное выполнение не организует `pageParam` и не сохраняет `InfiniteData`. Серверный loader и браузерный observer должны использовать совместимую форму кэша; пример обоих вариантов — в [каталоге](../react/catalog.md#loader-как-consumer).
+Infinite QO не передаётся в `qc.query`: обычное выполнение не организует `pageParam` и не сохраняет `InfiniteData`. Серверный loader и браузерный observer должны использовать совместимую форму кэша; реализация consumer зависит от [выбранного адаптера](../README.md).
 
 `qc.query` и `qc.infiniteQuery` отклоняют Promise при ошибке: loader передаёт её framework adapter, а необязательная предзагрузка явно обрабатывает rejection. Одного `void` недостаточно. Выбор ожидания, обработки ошибок и свежести принадлежит consumer. Семантика методов описана в [QueryClient](https://tanstack.com/query/latest/docs/framework/react/reference/classes/QueryClient).
 
@@ -33,7 +33,7 @@ Infinite QO не передаётся в `qc.query`: обычное выполн
 
 ## Инфраструктура и типы meta
 
-`QueryCache` предоставляет общие callbacks queries; `MutationCache` используется для исполнителя `meta.invalidates`. Поле meta — соглашение Kit, его тип регистрируется в модуле используемого адаптера. Установка executor и регистрация должны относиться к тому клиенту, который исполняет MO. Исполнитель и registration показаны в [React-каталоге](../react/catalog.md#mutation-meta-и-инфраструктура).
+`QueryCache` предоставляет общие callbacks queries; `MutationCache` используется для исполнителя `meta.invalidates`. Поле meta — соглашение Kit, его тип регистрируется в модуле используемого адаптера. Установка executor и регистрация должны относиться к тому клиенту, который исполняет MO. Imports и подключение определяются [выбранным адаптером](../README.md).
 
 Для заглушки consumer может использовать `placeholderData`, если это допускается его API. Реальные начальные данные задаются через `initialData` с корректным `initialDataUpdatedAt`; эти механизмы имеют разную семантику. Проверка отсутствующего ID через `skipToken` и ручное выполнение описаны в [Disabling Queries](https://tanstack.com/query/latest/docs/framework/react/guides/disabling-queries).
 
