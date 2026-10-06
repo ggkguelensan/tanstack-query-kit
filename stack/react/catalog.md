@@ -1,4 +1,6 @@
-# Пример: каталог товаров
+# React: каталог товаров
+
+Область применения: React и `@tanstack/react-query@5.104.1`. [Общие правила](../../SPECIFICATION.md) и [точки входа React](README.md). Роутер и SSR не требуются.
 
 Пример показывает границы модулей для вымышленных `Product` и `Category`. Пути относительные: файлы можно разместить в одном каталоге и затем разнести по структуре своего проекта. Блоки с именами файлов образуют согласованный TypeScript-пример.
 
@@ -74,8 +76,9 @@ export const productQK = {
   infinite: (params: ProductListParams) =>
     [...productQK.lists(), 'infinite', params] as const,
   details: () => [...productQK.all(), 'detail'] as const,
-  detail: (productId: string | undefined) =>
-    [...productQK.details(), productId] as const,
+  unavailableDetail: () => [...productQK.all(), 'unavailable', 'detail'] as const,
+  detail: (params: { productId: string }) =>
+    [...productQK.details(), params] as const,
 } as const;
 ```
 
@@ -85,8 +88,9 @@ export const productQK = {
 export const categoryQK = {
   all: () => ['category'] as const,
   details: () => [...categoryQK.all(), 'detail'] as const,
-  detail: (categoryId: string | undefined) =>
-    [...categoryQK.details(), categoryId] as const,
+  unavailableDetail: () => [...categoryQK.all(), 'unavailable', 'detail'] as const,
+  detail: (params: { categoryId: string }) =>
+    [...categoryQK.details(), params] as const,
 } as const;
 ```
 
@@ -97,20 +101,40 @@ export const categoryQK = {
 `product.qo.ts`
 
 ```ts
+import type { QueryFunctionContext } from '@tanstack/react-query';
 import { infiniteQueryOptions, queryOptions, skipToken } from '@tanstack/react-query';
 import { getProduct, getProductPage, getProducts } from './catalog.transport';
 import type { ProductListParams } from './catalog.types';
 import { productQK } from './product.qk';
 
-export const productDetailQO = (productId: string | undefined) =>
-  queryOptions({
-    queryKey: productQK.detail(productId),
-    queryFn: productId !== undefined && productId !== ''
-      ? ({ signal }) => getProduct(productId, { signal })
-      : skipToken,
+export const productDetailQO = ({ productId }: { productId: string | undefined }) =>
+  queryOptions((() => {
+    if (!productId) {
+      return {
+        queryKey: productQK.unavailableDetail(),
+        queryFn: skipToken,
+        staleTime: 30_000,
+        gcTime: 300_000,
+      } as const;
+    }
+
+    return {
+      queryKey: productQK.detail({ productId }),
+      queryFn: ({ signal }: QueryFunctionContext) => getProduct(productId, { signal }),
+      staleTime: 30_000,
+      gcTime: 300_000,
+    };
+  })());
+
+// Для consumers, которым обязательные параметры уже доступны.
+export const productRequiredDetailQO = ({ productId }: { productId: string }) => {
+  return queryOptions({
+    queryKey: productQK.detail({ productId }),
+    queryFn: ({ signal }) => getProduct(productId, { signal }),
     staleTime: 30_000,
     gcTime: 300_000,
   });
+};
 
 export const productListQO = (params: ProductListParams) =>
   queryOptions({
@@ -135,20 +159,34 @@ export const productInfiniteQO = (params: ProductListParams) =>
 `category.qo.ts`
 
 ```ts
+import type { QueryFunctionContext } from '@tanstack/react-query';
 import { queryOptions, skipToken } from '@tanstack/react-query';
 import { getCategory } from './catalog.transport';
 import { categoryQK } from './category.qk';
 
-export const categoryDetailQO = (categoryId: string | undefined) =>
-  queryOptions({
-    queryKey: categoryQK.detail(categoryId),
-    queryFn: categoryId !== undefined && categoryId !== ''
-      ? ({ signal }) => getCategory(categoryId, { signal })
-      : skipToken,
-    staleTime: 60_000,
-    gcTime: 300_000,
-  });
+export const categoryDetailQO = ({ categoryId }: { categoryId: string | undefined }) =>
+  queryOptions((() => {
+    if (!categoryId) {
+      return {
+        queryKey: categoryQK.unavailableDetail(),
+        queryFn: skipToken,
+        staleTime: 60_000,
+        gcTime: 300_000,
+      } as const;
+    }
+
+    return {
+      queryKey: categoryQK.detail({ categoryId }),
+      queryFn: ({ signal }: QueryFunctionContext) => getCategory(categoryId, { signal }),
+      staleTime: 60_000,
+      gcTime: 300_000,
+    };
+  })());
 ```
+
+Каждая ветка содержит полный конфиг: совпадение `staleTime` и `gcTime` само по себе не требует общей `Policy` или `Parts`. Inline-функция выбирает конфиг через early return; внешний `queryOptions` выводит общий тип данных и ключа из выбранных значений. Два отдельных вызова `queryOptions` в ветках дают несовместимое объединение options на проверенной версии; inline-выбор сохраняет inference без явных generics. `as const` сохраняет `skipToken` как unique symbol.
+
+`productRequiredDetailQO` сохраняет тот же detail-ключ и форму данных, но не допускает `skipToken`. Она подходит для Suspense и для императивного consumer с готовым ID. Проверка внешнего ввода выполняется до вызова ready-QO: она принимает уже подготовленный ID и не повторяет guard. `string` исключает `undefined`, но сам по себе допускает пустую строку; готовность ID является контрактом consumer. Обычная `productDetailQO` выражает неготовность через технический ключ и early return.
 
 Значения времени иллюстративны. В реальном приложении они выбираются по допустимому возрасту данных.
 
@@ -175,25 +213,35 @@ declare module '@tanstack/react-query' {
 `query-client.ts`
 
 ```ts
-import { MutationCache, QueryClient } from '@tanstack/react-query';
+import { matchQuery, MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 import './mutation-meta';
 
-export const createQueryClient = (): QueryClient => {
+export const createQueryClient = (
+  { onBackgroundError }: { onBackgroundError?: (error: unknown) => void } = {},
+): QueryClient => {
+  const queryCache = new QueryCache({
+    onError: (error, query) => {
+      if (query.state.data === undefined) return;
+      onBackgroundError?.(error);
+    },
+  });
   const mutationCache = new MutationCache({
     onSuccess: async (_data, _variables, _onMutateResult, mutation, context) => {
-      await Promise.all(
-        (mutation.meta?.invalidates ?? []).map((queryKey) =>
-          context.client.invalidateQueries({ queryKey }),
-        ),
-      );
+      const invalidates = mutation.meta?.invalidates;
+      if (!invalidates?.length) return;
+      await context.client.invalidateQueries({
+        predicate: (query) => invalidates.some((queryKey) => matchQuery({ queryKey }, query)),
+      });
     },
   });
 
-  return new QueryClient({ mutationCache });
+  return new QueryClient({ queryCache, mutationCache });
 };
 ```
 
-Исполнитель знает только список префиксов. При отсутствии плана он ничего не делает. Фабрика клиента вызывается один раз на серверный request или при создании стабильного браузерного клиента, а не при каждом рендере.
+Браузерный adapter может передать `onBackgroundError` для общего уведомления; серверный adapter не передаёт UI-callback. Ошибку первой загрузки отображает consumer или Boundary. Подписчики одной query не создают отдельные уведомления о фоновой ошибке.
+
+Исполнитель сопоставляет список префиксов одним вызовом: их пересечение не отменяет и не перезапускает один refetch. При отсутствии или пустом плане он ничего не делает. Подход показан у [TkDodo — Automatic Invalidation](https://tkdodo.eu/blog/automatic-query-invalidation-after-mutations). Фабрика клиента вызывается один раз на серверный request или при создании стабильного браузерного клиента, а не при каждом рендере.
 
 ## Мутации
 
@@ -215,7 +263,7 @@ export const productRenameMO = () =>
   mutationOptions({
     mutationFn: (variables: RenameProductRequest) => renameProduct(variables),
     onSuccess: async (product, variables, _onMutateResult, { client }) => {
-      client.setQueryData(productQK.detail(variables.productId), product);
+      client.setQueryData(productQK.detail({ productId: variables.productId }), product);
       await client.invalidateQueries({ queryKey: productQK.lists() });
     },
   });
@@ -246,7 +294,7 @@ export const productPageAggregation = {
   categoryQO: categoryDetailQO,
   renameProductMO: productRenameMO,
   shouldQueryCategory: (product: Product | undefined) =>
-    product?.status === 'published' && product.categoryId !== undefined,
+    product?.status === 'published',
   toView: toProductPageView,
 } as const;
 ```
@@ -269,19 +317,21 @@ type ProductPanelProps = {
 
 export const ProductPanel = ({ productId, isPanelOpen, onRenamed }: ProductPanelProps) => {
   const productQuery = useQuery({
-    ...productPageAggregation.productQO(productId),
+    ...productPageAggregation.productQO({ productId }),
     enabled: isPanelOpen,
   });
+  const shouldQueryCategory = productPageAggregation.shouldQueryCategory(productQuery.data);
   const categoryQuery = useQuery({
-    ...productPageAggregation.categoryQO(productQuery.data?.categoryId),
-    enabled: isPanelOpen
-      && productPageAggregation.shouldQueryCategory(productQuery.data),
+    ...productPageAggregation.categoryQO({ categoryId: productQuery.data?.categoryId }),
+    enabled: isPanelOpen && shouldQueryCategory,
   });
   const rename = useMutation(productPageAggregation.renameProductMO());
 
   if (!isPanelOpen) return null;
-  if (productId === undefined || productId === '') return <p>Выберите товар</p>;
-  if (productQuery.isError) return <p>Не удалось загрузить товар</p>;
+  if (!productId) return <p>Выберите товар</p>;
+  if (productQuery.isError && productQuery.data === undefined) {
+    return <p>Не удалось загрузить товар</p>;
+  }
   if (!productQuery.data) return <p>Загрузка…</p>;
 
   const product = productQuery.data;
@@ -290,9 +340,10 @@ export const ProductPanel = ({ productId, isPanelOpen, onRenamed }: ProductPanel
   return (
     <section>
       <h1>{view.title}</h1>
+      {productQuery.isRefetchError && <p>Не удалось обновить товар</p>}
       {view.categoryName && <p>{view.categoryName}</p>}
-      {categoryQuery.isFetching && <p>Загрузка категории…</p>}
-      {categoryQuery.isError && <p>Не удалось загрузить категорию</p>}
+      {shouldQueryCategory && categoryQuery.isFetching && <p>Загрузка категории…</p>}
+      {shouldQueryCategory && categoryQuery.isError && <p>Не удалось загрузить категорию</p>}
       <button
         disabled={rename.isPending}
         onClick={() => rename.mutate(
@@ -316,15 +367,23 @@ export const ProductPanel = ({ productId, isPanelOpen, onRenamed }: ProductPanel
 
 ```ts
 import type { QueryClient } from '@tanstack/react-query';
-import { productDetailQO } from './product.qo';
+import { productInfiniteQO, productRequiredDetailQO } from './product.qo';
+import type { ProductListParams } from './catalog.types';
 
-export const loadProduct = async (client: QueryClient, productId: string) => {
-  if (productId === '') throw new Error('Product ID is required');
-  return client.ensureQueryData(productDetailQO(productId));
+export const loadProduct = async (qc: QueryClient, productId: string) => {
+  return qc.query({
+    ...productRequiredDetailQO({ productId }),
+    staleTime: 'static',
+  });
 };
+
+export const loadProductFeed = (qc: QueryClient, params: ProductListParams) =>
+  qc.infiniteQuery(productInfiniteQO(params));
 ```
 
-Framework adapter передаёт request-scoped client на сервере или стабильный client в браузере. Здесь сознательно допускается чтение существующих данных через `ensureQueryData`; если loader должен дождаться обновления устаревшего ресурса, выбирается `fetchQuery` с подходящим `staleTime`.
+Framework adapter передаёт request-scoped client на сервере или стабильный client в браузере. `loadProduct` сознательно допускает чтение любых существующих данных через `staleTime: 'static'`. Если loader должен дождаться обновления устаревшего ресурса, consumer передаёт QO без этого override, сохраняя ресурсную свежесть.
+
+`loadProductFeed` организует страницы и сохраняет форму `InfiniteData`, совместимую с `useInfiniteQuery`. API для обычных и infinite QO, включая выбор методов предыдущих версий, приведены в [таблице методов](../tanstack-query/README.md#императивное-выполнение). Ошибка загрузки отклоняет Promise и передаётся framework adapter.
 
 ## Другие consumer-сценарии
 
@@ -332,7 +391,7 @@ Framework adapter передаёт request-scoped client на сервере и�
 
 ```tsx
 const products = useQueries({
-  queries: productIds.map((id) => productDetailQO(id)),
+  queries: productIds.map((id) => productDetailQO({ productId: id })),
 });
 
 const names = useQuery({
