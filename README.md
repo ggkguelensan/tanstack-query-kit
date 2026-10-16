@@ -20,3 +20,19 @@
 | `product-page.aggregation.ts` | `productPageAggregation` | Композицию QO/MO и доменных функций сценария |
 
 Для переноса Kit в проект следуйте [руководству адаптации и внедрения](ADOPTION.md). Реализации и примеры выбираются по [составу стека](stack/README.md).
+
+## Agent skills
+
+[optimize-query-subscriptions](skills/optimize-query-subscriptions/SKILL.md) анализирует React-дерево и пути данных от QO через query-hooks до потребителей. Предлагает перенос или разделение подписок и узкие `select`, проверяя загрузку, Suspense, ошибки и infinite pagination. При запросе рефакторинга применяет обоснованные изменения.
+
+Для установки перенесите каталог `skills/optimize-query-subscriptions` целиком, включая `references`, в каталог skills вашего агента. Спецификация Kit остаётся каноническим контрактом; скилл ссылается на неё и учитывает адаптацию целевого проекта.
+
+Примеры вызова:
+
+```text
+Используй $optimize-query-subscriptions: проанализируй маршрут /orders,
+покажи пути query-данных и деревья до/после без изменения кода.
+
+Используй $optimize-query-subscriptions: оптимизируй подписки orderListQO
+на экране заказов, сохрани поведение загрузки и ошибок и проверь изменения.
+```
